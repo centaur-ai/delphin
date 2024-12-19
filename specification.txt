@@ -10,6 +10,17 @@
 5. Independent entity variables can have parallel scopes
 6. Variables in inner scopes automatically have access to all variables from lexically enclosing scopes
 
+### Quantifier Types and Scoping  
+1. There are three classes of quantifiers that must be handled distinctly:
+   - Universal quantifiers (every_q)
+   - Definite quantifiers (the_q, def_explicit_q) 
+   - Indefinite quantifiers (proper_q, udef_q, etc.)
+2. Definite and indefinite quantifiers must not be fused or reordered relative to each other
+3. Definite quantifiers serialize to set/predicate forms
+4. Indefinite quantifiers serialize to standard existential quantification (?[var])
+5. Universal quantifiers must have tighter scope than any definite/indefinite quantifiers
+   referencing the same variable
+
 ## Transformation Pipeline
 
 ### Phase 1
@@ -149,4 +160,4 @@ pred(b,c,x) or pred(b,x,c)
 ..and the same output would occur.  In other words, ordering still matters for arg1/arg2/.. but only for the non-x variables.
 
 "x" is used as the first argument because it is important that the first variable listed be the first "x" variable in the argument list of pred.
-This may require some filtering for some predicates.  
+This may require some filtering for some predicates.
