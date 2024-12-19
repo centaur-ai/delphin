@@ -10,8 +10,7 @@ open PWL.Transform
 open InsertionSort
 open BEq
 
-def removeQuotes (s : String) : String :=
-  if s.startsWith "\"" && s.endsWith "\"" then s.extract ⟨1⟩ ⟨s.length - 1⟩ else s
+open PWL (removeQuotes)
 
 def normalizePredicate (pred : String) : String :=
   if pred.startsWith "_" then pred.drop 1 else pred
@@ -31,7 +30,7 @@ partial def formatPredArgs (pred : String) (args : List (String × Var)) (carg :
     if pred == "named" || pred == "_named" then
       match carg with
       | some c => 
-        s!"{base}({xvar},\"{removeQuotes c}\")"
+        s!"({base}({xvar}) & arg1({xvar})=\"{removeQuotes c}\")"
       | none => s!"{base}({xvar})"
     else
       let nonXArgs := args.filter (fun p => p.2.sort ≠ 'x')
