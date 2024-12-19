@@ -15,11 +15,10 @@
    - Universal quantifiers (every_q)
    - Definite quantifiers (the_q, def_explicit_q) 
    - Indefinite quantifiers (proper_q, udef_q, etc.)
-2. Definite and indefinite quantifiers must not be fused or reordered relative to each other
-3. Definite quantifiers serialize to set/predicate forms
-4. Indefinite quantifiers serialize to standard existential quantification (?[var])
-5. Universal quantifiers must have tighter scope than any definite/indefinite quantifiers
-   referencing the same variable
+2. Universal quantifiers (every_q) must take wider scope than negations (both neg and never_a_1) when they interact
+3. Definite and indefinite quantifiers must not be fused or reordered relative to each other
+4. Definite quantifiers serialize to set/predicate forms
+5. Indefinite quantifiers serialize to standard existential quantification (?[var])
 
 ## Transformation Pipeline
 
@@ -49,95 +48,29 @@ The Formula structure must capture the variable bindings, argument dependencies,
 
 The data structure that represents predicates (EP) has a slot called CARG for named's string.
 Use this slot for storing the combined string. In this way, no new predicates need to be generated and the handle map can 
-remain fixed. 
-
-Phase 2 will produce a hierarchical Formula that wraps an EP. It needs to store the first "x" variable in the quantifiers so that phase 3
-can serialize results in the format described in phase 3.  In the concrete syntax "?[x]:" will preface the serialization of Formula EPs.
-Example transformations for quantifiers:
+remain fixed.
 
 ### Phase 3
 Phase 3 converts X2 to X1, eliminating it from all predicates.
 
 ### Phase 4
-Phase 4 performs minimum scoping, described below.
-
-There are two types of PWL syntax for scope.  The first, and typical case is existential
-quantification and it uses the syntax "?[X]:".  The other is universal quantification
-and it uses the syntax "![X]:".  X may be a single variable name or a comma delimited set of variable names.
-It is important that the scope for universal quantification be tight, and that no other
-variables mistakely get included in a universal quantification variable list. 
-PWL universal quantification is connected with the every_q quantifier.   Other MRS/ERG _q quantifiers like
-the_q or udef_q should have their variables be denoted with PWL existential quantifers.
-Only if a universal and an existential MRS/ERG quantifier both reference the same variable may
-there be both PWL existential and universal quantifier.  In these cases, the existential must be on the outside, wrapping the universal quanitifer.
-The default, however, should be that there is either an existential or a universal quantifier but not both.
-
-For example, this would be illegal:
-
-```
-?[x3]:(?[x8]:(/* every_q */ ![x8]:((_hate_v_1(e2, x3, x8) & person(x3) & person(x8)))))
-```
-
-## Example Final Output Format (after phase 5)
-The serialized output should match this format and follow all scoping rules:
-
-```
-?[x3]:(
-  ?[x46]:(
-    live_v_1(x46, e53) &
-    people_n_of(i52, x46) &
-    only_a_1(x46, e51) &
-    be_v_id(x46, x3, e45) &
-    ?[x32]:(
-      /* proper_q */ ?[n]:(name(n) & arg1(n)=x32 & arg2(n)="Dreadbury Mansion") &
-      in_p_loc(x32, e30, e31)
-    ) &
-    ?[x8]:(
-      /* proper_q */ ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
-      ?[x14]:(
-        ?[x19,x24]:(
-          /* proper_q */ ?[n]:(name(n) & arg1(n)=x24 & arg2(n)="Charles") &
-          butler_n_1(x19) &
-          and_c(x24, x19, x14)
-        ) &
-        implicit_conj(x14, x8, x3)
-      )
-    )
-  ) &
-  live_v_1(x3, e30)
-)
-```
+Phase 4 performs minimum scoping, described above.
 
 ### Phase 5
 Phase 5 serializes as below.
 
-A quantifier predicate like:
+A named predicate like:
 ```
-proper_q(X1,named(X1,s1),A & B, carg=s1 + " " + s2)
+named(X1,"London")
 ```
 
 will be serialized into:
 
 ```
-/* proper_q */ (?[n]:(name(n) & arg1(n)=X1 & arg2(n)=(s1 + " " + s2) & AA))
+(named(X1) & arg1(X1)="London")
 ```
 
-the_q gets this translated from..
-
-```
-the_q(X, A(X), B)
-```
-
-to
-
-```
-?[S]:(S=^[s]:A(s) & size(S)=1 S(x) & B) 
-```
-#### Argument rewriting
-
-For non-quantifier predicates the rewriting below should be used.
-
-Respectively,
+Respectively for non-quantifier predicates:
 
 pred(x)
 pred(x,b)
@@ -157,7 +90,19 @@ pred(x)
 pred(b,x)
 pred(b,c,x) or pred(b,x,c) 
 
-..and the same output would occur.  In other words, ordering still matters for arg1/arg2/.. but only for the non-x variables.
+..and the same output would occur. In other words, ordering still matters for arg1/arg2/.. but only for the non-x variables.
 
 "x" is used as the first argument because it is important that the first variable listed be the first "x" variable in the argument list of pred.
 This may require some filtering for some predicates.
+
+For quantifiers, the_q gets translated from:
+
+```
+the_q(X, A(X), B)
+```
+
+to
+
+```
+?[S]:(S=^[s]:A(s) & size(S)=1 & S(x) & B) 
+```

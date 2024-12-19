@@ -8,7 +8,7 @@
 /* --- */
 ?[x3]:(/* proper_q */ ?[x15]:(/* the_q */ ![x9]:(/* every_q */ ((hate_v_1(x9) & arg1(x9)=e2) & (named(x3) & arg1(x3)="Agatha") & person(x9) & (except_p(x15) & arg1(x15)=e14) & butler_n_1(x15)))))
 /* --- */
-?[x25]:(/* proper_q */ ?[x3]:(/* the_q */ ~(/* neg(e13) */ ![x8]:(/* every_q */ ((hate_v_1(x8) & arg1(x8)=e2) & butler_n_1(x3) & person(x8) & (rich_a_in(x8) & arg1(x8)=i17 & arg2(x8)=e16) & (more_comp(x25) & arg1(x25)=e16 & arg2(x25)=e18) & (named(x25) & arg1(x25)="Aunt Agatha"))))))
+?[x25]:(/* proper_q */ ?[x3]:(/* the_q */ ![x8]:(/* every_q */ ~(/* neg(e13) */ ((hate_v_1(x8) & arg1(x8)=e2) & butler_n_1(x3) & person(x8) & (rich_a_in(x8) & arg1(x8)=i17 & arg2(x8)=e16) & (more_comp(x25) & arg1(x25)=e16 & arg2(x25)=e18) & (named(x25) & arg1(x25)="Aunt Agatha"))))))
 /* --- */
 ?[x19,x14]:(/* udef_q */ ?[x3]:(/* the_q */ ![x8]:(/* every_q */ ((hate_v_1(x8) & arg1(x8)=e2) & butler_n_1(x3) & person(x8) & (hate_v_1(x8) & arg1(x8)=e26) & (compound(x19) & arg1(x19)=e18) & (named(x14) & arg1(x14)="Agatha") & (aunt_n_of(x19) & arg1(x19)=i24)))))
 /* --- */

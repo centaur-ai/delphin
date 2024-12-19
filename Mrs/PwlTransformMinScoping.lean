@@ -97,20 +97,14 @@ def getXVars (ep : EP) : List Var :=
    |>.map (·.2)
    |>.eraseDups)
 
-/-- Create scoped formula while preserving negation scoping -/
+/-- Create scoped formula with strict ordering: negation, universal, definite/indefinite -/
 def createScopedFormula (formula : Formula) (univVars defVars indefVars : List Var) 
     (negInfo : List ScopeInfo) (quantMap : HashMap Var String) : Formula :=
   dbg_trace s!"Creating scoped formula with univVars={univVars} defVars={defVars} indefVars={indefVars}"
   
-  let withUniv := match univVars with
-    | [] => formula
-    | vars =>
-      dbg_trace s!"Adding universal scope for vars: {vars}"
-      Formula.scope vars (some "every_q") formula
-
-  -- Handle negation scoping here - maintain original scope position with variables
+  -- Handle negation scoping first
   let withNeg := match negInfo with
-    | [] => withUniv
+    | [] => formula
     | negScopes => 
       negScopes.foldl (fun acc scope =>
         match scope.scopeType with
@@ -118,15 +112,24 @@ def createScopedFormula (formula : Formula) (univVars defVars indefVars : List V
           Formula.neg (NegationType.Never i) acc
         | ScopeType.RegNeg e =>
           Formula.neg (NegationType.NegWithEvent e) acc
-        | _ => acc) withUniv
+        | _ => acc) formula
 
+  -- Then universal quantifiers
+  let withUniv := match univVars with
+    | [] => withNeg
+    | vars =>
+      dbg_trace s!"Adding universal scope for vars: {vars}"
+      Formula.scope vars (some "every_q") withNeg
+
+  -- Finally definite quantifiers
   let withDef := defVars.foldl (fun acc v =>
     match quantMap.find? v with
     | some quant => 
       dbg_trace s!"Adding definite scope for var {v} with quantifier {quant}"
       Formula.scope [v] (some quant) acc
-    | none => acc) withNeg
+    | none => acc) withUniv
 
+  -- And indefinite quantifiers, preserving their relative order with definites
   match indefVars with
   | [] => withDef
   | _ => 
