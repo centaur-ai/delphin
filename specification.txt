@@ -135,8 +135,8 @@ pred(x,b,c)
 ..should be rewritten as..
 
 pred(x)
-pred(x,arg1(x) = b)
-pred(x,arg1(x) = b,arg2(x) = c)
+(pred(x) & arg1(x)=b)
+(pred(x) & arg1(x)=b & arg2(x)=c)
 
 ..and so on.
 
