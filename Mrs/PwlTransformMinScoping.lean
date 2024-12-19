@@ -9,41 +9,86 @@ open MRS
 open InsertionSort
 open PWL.Transform
 open Lean (HashMap)
+open BEq
 
-structure QuantifierInfo where
-  quant : String
+inductive ScopeType 
+| Universal       -- every_q
+| Definite       -- the_q, def_explicit_q  
+| Indefinite     -- proper_q, udef_q, etc
+| NeverNeg (i: Var)      -- never_a_1 with its i variable
+| RegNeg (e: Var)        -- neg with its e variable
+deriving Inhabited, BEq
+
+instance : ToString ScopeType where
+  toString 
+  | ScopeType.Universal => "Universal"
+  | ScopeType.Definite => "Definite"
+  | ScopeType.Indefinite => "Indefinite"
+  | ScopeType.NeverNeg i => s!"NeverNeg({i})"
+  | ScopeType.RegNeg e => s!"RegNeg({e})"
+
+structure ScopeInfo where
+  predicate : String
   boundVars : List Var
+  scopeType : ScopeType
+  args : List (String × Var) := []
   deriving Inhabited
 
 structure FormulaState where
-  declared : List Var
-  neededVars : List Var
-  formula : Formula
+  declared : List Var := []
+  neededVars : List Var := []
+  formula : Formula := Formula.conj []
   deriving Inhabited
 
-instance : ToString QuantifierInfo where
-  toString qi := s!"{qi.quant}({qi.boundVars})"
+instance : ToString ScopeInfo where
+  toString si := s!"{si.predicate}({si.boundVars})"
 
 instance : ToString (HashMap Var String) where
   toString m := s!"{m.toList}"
 
-/-- Detect if formula contains universal quantification -/
-partial def hasUniversalQuantificationInFormula : Formula → Bool
-| Formula.atom _ => 
-  dbg_trace "Checking atom: no universal quantification"
-  false 
+def getScopeType (pred : String) (args : List (String × Var)) : ScopeType :=
+  let normalizedPred := fixName pred
+  if normalizedPred == "every_q" then
+    ScopeType.Universal
+  else if normalizedPred == "the_q" || normalizedPred == "def_explicit_q" then
+    ScopeType.Definite
+  else
+    ScopeType.Indefinite
+
+/-- Extract predicates from a formula -/
+partial def getPredicatesFromFormula : Formula → List EP
+| Formula.atom ep => [ep]
 | Formula.conj fs => 
-  (match fs with
-  | [] => false
-  | _ =>
-    dbg_trace "Checking conjunction for universal quantification"
-    fs.any hasUniversalQuantificationInFormula)
-| Formula.scope _ (some "every_q") _ => 
-  dbg_trace "Found universal quantification at scope level"
-  true
-| Formula.scope _ _ inner => 
-  dbg_trace "Checking inner scope for universal quantification"
-  hasUniversalQuantificationInFormula inner
+  match fs with
+  | [] => []
+  | _ => fs.foldl (fun acc f => acc ++ getPredicatesFromFormula f) []
+| Formula.scope _ _ inner => getPredicatesFromFormula inner
+| Formula.neg _ inner => getPredicatesFromFormula inner
+
+/-- Extract scope info from formula scope -/
+partial def getFormulaScopes : Formula → List ScopeInfo  
+| Formula.atom _ => []
+| Formula.conj fs => 
+  match fs with
+  | [] => []
+  | _ => fs.foldl (fun acc f => acc ++ getFormulaScopes f) []
+| Formula.scope vars (some pred) inner => 
+  let scopeType := getScopeType pred []
+  let innerScopes := getFormulaScopes inner
+  { predicate := pred,
+    boundVars := vars.eraseDups,
+    scopeType := scopeType } :: innerScopes
+| Formula.scope _ none inner => getFormulaScopes inner
+| Formula.neg negType inner => 
+  let scopeType := match negType with
+    | NegationType.Never i => ScopeType.NeverNeg i
+    | NegationType.NegWithEvent e => ScopeType.RegNeg e
+  let innerScopes := getFormulaScopes inner
+  { predicate := match negType with
+      | NegationType.Never i => "never_a_1"
+      | NegationType.NegWithEvent e => "neg",
+    boundVars := [],  -- Negations don't bind variables but maintain scope
+    scopeType := scopeType } :: innerScopes
 
 /-- Extract x-variables used in predicate -/
 def getXVars (ep : EP) : List Var :=
@@ -52,138 +97,104 @@ def getXVars (ep : EP) : List Var :=
    |>.map (·.2)
    |>.eraseDups)
 
-/-- Check if variable is universally quantified -/
-def isUniversalVar (quantifiers : List QuantifierInfo) (var : Var) : Bool :=
-  (match quantifiers.find? (fun qi => qi.quant == "every_q" && qi.boundVars.contains var) with
-  | some _ => 
-    dbg_trace s!"Variable {var} is universal"
-    true
-  | none => 
-    dbg_trace s!"Variable {var} is not universal"
-    false)
-
-/-- Create scoped formula while respecting universal/existential ordering -/
-def createScopedFormula (formula : Formula) (univVars existVars : List Var) (quantMap : HashMap Var String) : Formula :=
-  (match univVars with
-  | [] =>
-    dbg_trace "No universal variables"
-    (match existVars with
-    | [] =>
-      dbg_trace "No existential variables - returning base formula"
-      formula
-    | _ =>
-      dbg_trace s!"Processing existential vars: {existVars}"
-      (match existVars.head? with
-      | some v =>
-        dbg_trace s!"Looking up quantifier for head var: {v}"
-        let quant := quantMap.find? v
-        dbg_trace s!"Found quantifier: {quant}"
-        Formula.scope existVars quant formula
-      | none =>
-        dbg_trace "No head variable found"
-        formula))
-  | _ =>
-    dbg_trace s!"Processing universal vars: {univVars}"
-    let withUniv := Formula.scope univVars (some "every_q") formula
-    (match existVars with
-    | [] => withUniv
-    | _ =>
-      dbg_trace s!"Adding existential scope after universal"
-      (match existVars.head? with
-      | some v =>
-        let quant := quantMap.find? v
-        dbg_trace s!"Using quantifier {quant} for existentials"
-        Formula.scope existVars quant withUniv
-      | none => withUniv)))
-
-/-- Extract predicates from a formula -/
-partial def getPredicatesFromFormula : Formula → List EP
-| Formula.atom ep => [ep]
-| Formula.conj fs => 
-  (match fs with
-  | [] => []
-  | _ =>
-    dbg_trace "Extracting predicates from conjunction"
-    fs.foldl (fun acc f => acc ++ getPredicatesFromFormula f) [])
-| Formula.scope _ _ inner => 
-  dbg_trace "Extracting predicates from scope"
-  getPredicatesFromFormula inner
-
-/-- Extract quantifier info from formula scope -/
-partial def getFormulaQuantifiers : Formula → List QuantifierInfo  
-| Formula.atom _ => []
-| Formula.conj fs => 
-  (match fs with
-  | [] => []
-  | _ => 
-    dbg_trace "Getting quantifiers from conjunction"
-    fs.foldl (fun acc f => acc ++ getFormulaQuantifiers f) [])
-| Formula.scope vars (some quant) inner => 
-  (match quant with
-  | q => 
-    dbg_trace s!"Found scope with quantifier: {q}"
-    if q.endsWith "_q" then
-      dbg_trace s!"Quantifier {q} matches _q pattern"
-      let quantInfo := { quant := q, boundVars := vars.eraseDups }
-      -- Add this line to collect nested quantifiers
-      let innerQuants := getFormulaQuantifiers inner
-      dbg_trace s!"Collected inner quantifiers: {innerQuants}"
-      quantInfo :: innerQuants
-    else
-      dbg_trace "Quantifier does not end with _q"
-      getFormulaQuantifiers inner)
-| Formula.scope _ none inner =>
-  dbg_trace "Found scope with no quantifier, checking inner formula"
-  getFormulaQuantifiers inner
-
-/-- Build formula from predicates and quantifiers -/
-def buildFormula (preds : List EP) (quantifiers : List QuantifierInfo) : Formula :=
-  dbg_trace s!"Building formula with {preds.length} predicates and {quantifiers.length} quantifiers"
+/-- Create scoped formula while preserving negation scoping -/
+def createScopedFormula (formula : Formula) (univVars defVars indefVars : List Var) 
+    (negInfo : List ScopeInfo) (quantMap : HashMap Var String) : Formula :=
+  dbg_trace s!"Creating scoped formula with univVars={univVars} defVars={defVars} indefVars={indefVars}"
   
-  let initialState : FormulaState := {
+  let withUniv := match univVars with
+    | [] => formula
+    | vars =>
+      dbg_trace s!"Adding universal scope for vars: {vars}"
+      Formula.scope vars (some "every_q") formula
+
+  -- Handle negation scoping here - maintain original scope position with variables
+  let withNeg := match negInfo with
+    | [] => withUniv
+    | negScopes => 
+      negScopes.foldl (fun acc scope =>
+        match scope.scopeType with
+        | ScopeType.NeverNeg i => 
+          Formula.neg (NegationType.Never i) acc
+        | ScopeType.RegNeg e =>
+          Formula.neg (NegationType.NegWithEvent e) acc
+        | _ => acc) withUniv
+
+  let withDef := defVars.foldl (fun acc v =>
+    match quantMap.find? v with
+    | some quant => 
+      dbg_trace s!"Adding definite scope for var {v} with quantifier {quant}"
+      Formula.scope [v] (some quant) acc
+    | none => acc) withNeg
+
+  match indefVars with
+  | [] => withDef
+  | _ => 
+    match indefVars.head? with
+    | some v =>
+      let quant := quantMap.find? v
+      dbg_trace s!"Adding indefinite scope for vars {indefVars} with quantifier {quant}"
+      Formula.scope indefVars quant withDef
+    | none => withDef
+
+/-- Build formula from predicates and scopes -/
+def buildFormula (preds : List EP) (scopes : List ScopeInfo) : Formula :=
+  dbg_trace s!"Building formula with {preds.length} predicates and {scopes.length} scopes"
+  
+  let initState : FormulaState := {
     declared := [],
     neededVars := [],
     formula := Formula.conj []
   }
   
-  let baseState := preds.foldl (fun state ep => 
+  let baseState := preds.foldl (fun (state : FormulaState) (ep : EP) =>
     dbg_trace s!"Processing predicate: {ep}"
     let varsUsed := getXVars ep
     let newNeeded := varsUsed.filter (fun v => !state.declared.contains v)
-    let newFormula := match state.formula with
-    | Formula.conj fs => Formula.conj (Formula.atom ep :: fs)
-    | f => Formula.conj [Formula.atom ep, f]
-    { declared := state.declared,
+    { state with
       neededVars := (state.neededVars ++ newNeeded).eraseDups,
-      formula := newFormula }) initialState
-  
-  dbg_trace s!"Base state built with {baseState.neededVars.length} needed variables"
-  
-  let univVars := baseState.neededVars.filter (isUniversalVar quantifiers)
-  let existVars := baseState.neededVars.filter (fun v => !univVars.contains v)
-  
-  let quantMap := (match quantifiers with
-  | [] => 
-    dbg_trace "No quantifiers to process"
-    HashMap.empty
-  | _ =>
-    quantifiers.foldl (fun map qi => 
-      (match qi.boundVars.head? with
-      | some v => 
-        dbg_trace s!"Adding to quantMap: {v} -> {qi.quant}"
-        map.insert v qi.quant
-      | none => map)) HashMap.empty)
-  
-  dbg_trace s!"Created quantMap with {quantMap.size} entries"
-  createScopedFormula baseState.formula univVars existVars quantMap
+      formula := Formula.conj (Formula.atom ep :: match state.formula with
+        | Formula.conj fs => fs
+        | f => [f]) }) initState
 
-/-- Public interface for minimum scoping -/
+  let univVars := baseState.neededVars.filter (fun v =>
+    scopes.any (fun si => 
+      match si.scopeType with
+      | ScopeType.Universal => si.boundVars.contains v
+      | _ => false))
+  
+  let defVars := baseState.neededVars.filter (fun v =>
+    scopes.any (fun si =>
+      match si.scopeType with
+      | ScopeType.Definite => si.boundVars.contains v
+      | _ => false))
+
+  let indefVars := baseState.neededVars.filter (fun v =>
+    scopes.any (fun si =>
+      match si.scopeType with
+      | ScopeType.Indefinite => si.boundVars.contains v
+      | _ => false))
+
+  let negScopes := scopes.filter (fun si =>
+    match si.scopeType with
+    | ScopeType.NeverNeg _ => true
+    | ScopeType.RegNeg _ => true
+    | _ => false)
+
+  let quantMap := scopes.foldl (fun map si =>
+    match si.boundVars.head? with
+    | some v => map.insert v si.predicate
+    | none => map) HashMap.empty
+
+  dbg_trace s!"Final categorization - Universal:{univVars} Definite:{defVars} Indefinite:{indefVars} Negation:{negScopes}"
+  
+  createScopedFormula baseState.formula univVars defVars indefVars negScopes quantMap
+
 def minimizeScoping (f : Formula) : Formula :=
   dbg_trace "Starting minimizeScoping"
   let preds := getPredicatesFromFormula f
-  let quants := getFormulaQuantifiers f 
-  dbg_trace s!"Found {preds.length} predicates and {quants.length} quantifiers"
-  buildFormula preds quants
+  let scopes := getFormulaScopes f 
+  buildFormula preds scopes
 
 end PWL.Transform.MinScoping
 

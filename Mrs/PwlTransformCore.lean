@@ -11,57 +11,10 @@ namespace PWL.Transform
 
 open MRS (Var EP Constraint MRS)
 open MM (Multimap)
-open Lean (Format)
+open Lean (Format HashMap)
 open InsertionSort
-open PWL.Transform.Scoping (processPredicates processEP EliminatedVars isVarEliminated collectEliminatedVars)
-open PWL.Transform.MinScoping (minimizeScoping)
-open PWL.Transform.Serialize (formatAsPWL)
-
-structure CompoundMatch where
-  compound : EP
-  properQ1 : EP
-  properQ2 : EP
-  named1   : EP
-  named2   : EP
-  deriving Repr, Inhabited, BEq
-
-instance : ToString CompoundMatch where
-  toString m := s!"CompoundMatch(compound.label: {m.compound.label}, properQ1.label: {m.properQ1.label}, compound: {m.compound})"
-
-instance : ToString (List CompoundMatch) where
-  toString xs := String.intercalate ", " (xs.map toString)
-
-def shouldRemove (p : EP) (pat : CompoundMatch) : Bool :=
-  p == pat.compound || p == pat.properQ1 || p == pat.properQ2 || 
-  p == pat.named1 || p == pat.named2
-
-def getCompoundPattern (preds : List EP) (c : EP) (handleMap : Multimap Var EP) : Option CompoundMatch :=
-  if c.predicate != "compound" && c.predicate != "_compound" then none else
-  (match c.rargs with
-  | (_, x1) :: (_, x2) :: _ =>
-    dbg_trace ("Found compound args: " ++ toString x1 ++ ", " ++ toString x2)
-    if x1.sort == 'x' && x2.sort == 'x' then
-      let handlePreds := handleMap.keys.foldl (fun acc k =>
-        match handleMap.find? k with
-        | some preds => acc ++ preds
-        | none => acc) []
-
-      let preds1 := handlePreds.filter fun p => p.rargs.any fun (_, v2) => v2 == x1
-      let preds2 := handlePreds.filter fun p => p.rargs.any fun (_, v2) => v2 == x2
-
-      let properQ1 := preds1.find? fun p => p.predicate.endsWith "_q"
-      let properQ2 := preds2.find? fun p => p.predicate.endsWith "_q"
-      let named1 := preds1.find? fun p => p.predicate == "named"
-      let named2 := preds2.find? fun p => p.predicate == "named"
-
-      match properQ1, properQ2, named1, named2 with
-      | some q1, some q2, some n1, some n2 =>
-        match n1.carg, n2.carg with
-        | some s1, some s2 => some ⟨c, q1, q2, n1, n2⟩
-        | _, _ => none
-      | _, _, _, _ => none
-    else none
-  | _ => none)
+open HOF (lastTwoChars)
+open PWL.Transform.Scoping (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle)
 
 def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option EP :=
   dbg_trace ("Making temp_compound_name with: " ++
@@ -76,12 +29,6 @@ def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option
     let x2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "ARG0")
     let b1 := pat.properQ1.rargs.find? (fun arg => arg.1 == "BODY")
     let b2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "BODY") 
-    
-    dbg_trace ("properQ1 args: " ++ toString pat.properQ1.rargs)
-    dbg_trace ("properQ2 args: " ++ toString pat.properQ2.rargs)
-    dbg_trace ("Found ARG0s: " ++ toString x1 ++ ", " ++ toString x2)
-    dbg_trace ("Found BODYs: " ++ toString b1 ++ ", " ++ toString b2)
-    
     match x1, x2, b1, b2 with
     | some (_, var1), some (_, var2), some (_, body1), some (_, body2) =>
       some (EP.mk "temp_compound_name" none parent
@@ -89,6 +36,117 @@ def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option
         (some ("\"" ++ removeExtraQuotes s1 ++ " " ++ removeExtraQuotes s2 ++ "\"")))
     | _, _, _, _ => none
   | _, _ => none)
+
+mutual
+  partial def processPredicates (parent : Var) (eps : List EP) (seenHandles : List Var) 
+      (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
+    match eps with
+    | [] => (some (Formula.conj []), stats)
+    | [ep] => processEP parent ep seenHandles hm stats ev
+    | _ =>
+      dbg_trace ("processPredicates for handle " ++ toString parent)
+      dbg_trace ("  predicates: " ++ toString eps)
+      dbg_trace ("  handleMap keys: " ++ toString hm.keys)
+      match processEPs parent eps seenHandles hm stats ev with
+      | (formulas, finalStats) =>
+        dbg_trace ("  results: " ++ toString formulas)
+        match formulas with
+        | [] => (some (Formula.conj []), finalStats)
+        | fs => (some (Formula.conj fs), finalStats)
+
+  partial def processEPs (parent : Var) (eps : List EP) (seenHandles : List Var)
+      (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (List Formula × Stats) :=
+    eps.foldl (fun (acc, stats) ep =>
+      match processEP parent ep seenHandles hm stats ev with
+      | (some formula, newStats) => (acc ++ [formula], newStats)
+      | (none, newStats) => (acc, newStats)) ([], stats)
+
+  partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
+      (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
+    if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
+      (none, stats)
+    else
+      let newSeen := ep.label :: seenHandles
+      dbg_trace s!"processEP: {ep.predicate} with label {ep.label}"
+      match ep.predicate with 
+      | "never_a_1" | "_never_a_1" =>
+        match ep.rargs.find? (fun arg => arg.1 == "ARG1"), ep.rargs.find? (fun arg => arg.1 == "ARG0") with
+        | some (_, handle), some (_, ivar) =>
+          let innerPreds := hm.find? handle |>.getD []
+          match processPredicates ep.label innerPreds newSeen hm stats ev with
+          | (none, stats1) => (none, stats1)
+          | (some inner, stats1) =>
+            (some (Formula.neg (NegationType.Never ivar) inner), addStat stats1 2)
+        | _, _ => (none, stats)
+
+      | "neg" | "_neg" =>
+        match ep.rargs.find? (fun arg => arg.1 == "ARG1") with
+        | none => (none, stats)
+        | some (_, handle) =>
+          let innerPreds := hm.find? handle |>.getD []
+          -- Get the event variable if it exists
+          let evar := match ep.rargs.find? (fun arg => arg.1 == "ARG0") with
+            | some (_, e) => e
+            | none => {id := 0, sort := 'e', props := #[]}
+          match processPredicates ep.label innerPreds newSeen hm stats ev with
+          | (none, stats1) => (none, stats1)
+          | (some inner, stats1) =>
+            (some (Formula.neg (NegationType.NegWithEvent evar) inner), addStat stats1 2)
+
+      | "temp_compound_name" =>
+        match ep.rargs with
+        | [("X1", x1), ("X2", x2), ("A", a), ("B", b)] =>
+          let aPreds := hm.find? a |>.getD []
+          dbg_trace ("Looking up handle " ++ toString a ++ " in handleMap; found preds: " ++ toString aPreds)
+          let bPreds := hm.find? b |>.getD []
+          dbg_trace ("Looking up handle " ++ toString b ++ " in handleMap; found preds: " ++ toString bPreds)
+          match processPredicates ep.label aPreds newSeen hm stats ev with
+          | (none, stats1) => (none, stats1)
+          | (some aFormula, stats1) =>
+            match processPredicates ep.label bPreds newSeen hm stats1 ev with
+            | (none, stats2) => (none, stats2) 
+            | (some bFormula, stats2) =>
+              match ep.carg with
+              | some name =>
+                dbg_trace ("SCOPE: temp_compound at " ++ toString ep.label)
+                dbg_trace ("  aFormula: " ++ toString aFormula)
+                dbg_trace ("  bFormula: " ++ toString bFormula)
+                let namedEP := EP.mk "named" none ep.label [("ARG0", x1)] (some name)
+                let rstr := Formula.atom namedEP
+                let substitutedBFormula := bFormula.substitute x2 x1
+                let body := Formula.conj [rstr, substitutedBFormula]
+                dbg_trace ("  constructed body: " ++ toString body)
+                (some (Formula.scope [x1] (some "proper_q") body), addStat stats2 1)
+              | none => (none, stats2)
+        | _ => (none, stats)
+
+      | p =>
+        if lastTwoChars p == "_q" then
+          dbg_trace s!"Processing quantifier predicate: {p}"
+          match getOrderedQuantArgs ep.rargs with 
+          | none => (none, stats)
+          | some (arg0, rstr, body) =>
+            dbg_trace s!"SCOPE: quantifier {p}\n  ARG0: {arg0}\n  RSTR: {rstr}\n  BODY: {body}"
+            let rstrPreds := hm.find? rstr |>.getD []
+            dbg_trace s!"Looking up RSTR handle {rstr} in handleMap; found preds: {rstrPreds}"
+            let bodyPreds := hm.find? body |>.getD []
+            dbg_trace s!"Looking up BODY handle {body} in handleMap; found preds: {bodyPreds}"
+            dbg_trace s!"Creating scope with quant: {p}"
+            match processPredicates ep.label rstrPreds newSeen hm stats ev with
+            | (none, stats1) => (none, stats1)
+            | (some rstrFormula, stats1) =>
+              dbg_trace s!"  RSTR preds for {p}: {rstrPreds}"
+              dbg_trace s!"  RSTR result: {rstrFormula}"
+              match processPredicates ep.label bodyPreds newSeen hm stats1 ev with
+              | (none, stats2) => (none, stats2)
+              | (some bodyFormula, stats2) =>
+                dbg_trace s!"  BODY preds for {p}: {bodyPreds}"
+                dbg_trace s!"  BODY result: {bodyFormula}"
+                dbg_trace s!"Building final scope for {p} with arg0 {arg0}"
+                (some (Formula.scope [arg0] (some p) (Formula.conj [rstrFormula, bodyFormula])), addStat stats2 3)
+        else
+          (some (Formula.atom ep), stats)
+end
 
 def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars) :=
   let compounds := preds.filter fun p => 
@@ -99,11 +157,9 @@ def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP ×
   dbg_trace ("Found patterns: " ++ toString patterns)
   dbg_trace ("Found pattern handles: " ++ toString (patterns.map (fun p => p.compound.label)))
 
-  -- First create temps with no variables eliminated  
   let temps := patterns.filterMap (makeTemp parent EliminatedVars.empty)
   dbg_trace ("Created temp compounds: " ++ toString temps)
 
-  -- Then track variables eliminated by successful transformations
   let eliminatedVars := collectEliminatedVars $
     patterns.filter (fun p => temps.any (fun t => t.predicate == "temp_compound_name"))
     |>.map (fun p => p.compound)
@@ -115,13 +171,12 @@ def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP ×
   
   (remaining ++ temps, eliminatedVars)
 
-def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula := 
+def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula :=
   match hm.find? handle with 
   | none => unreachable!
   | some rootPreds => 
     dbg_trace ("phase2 starting at handle " ++ toString handle)
     dbg_trace ("  root predicates: " ++ toString rootPreds)
-    -- First collect all substitutions from temp_compound_name predicates
     let substitutions := preds.foldl (fun acc ep =>
       if ep.predicate == "temp_compound_name" then
         match (getArg ep "X1", getArg ep "X2") with
@@ -129,21 +184,20 @@ def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars)
         | _ => acc
       else acc) []
     dbg_trace s!"Collected substitutions: {substitutions}"
-    -- Then process predicates normally
+
     let emptyStats : Stats := default
-    let (result, _) := processPredicates parent rootPreds [] hm emptyStats ev
-    -- Finally apply all substitutions to the result
+    let (result, _) := processPredicates handle rootPreds [] hm emptyStats ev
     match result with
     | none => none
     | some formula =>
       some (substitutions.foldl (fun f (old, new) => f.substitute old new) formula)
       |>.map Formula.removeEmptyConj
 
-def phase3 (f : Formula) : Formula := 
+def phase3 (f : Formula) : Formula :=
   minimizeScoping f
 
 def phase4 (f : Formula) : String :=
-  formatAsPWL f
+  formatAsPWL f none
 
 def updateHandleMap (preds : List EP) : Multimap Var EP :=
   preds.foldl (fun hm ep => hm.insert ep.label ep) Multimap.empty
@@ -165,6 +219,6 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       let minScoped := phase3 formula
       phase4 minScoped
 
-end PWL.Transform 
+end PWL.Transform
 
 export PWL.Transform (transform)
