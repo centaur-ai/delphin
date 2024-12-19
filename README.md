@@ -19,6 +19,8 @@ Run with
 ./runit
 ```
 
+You will need erg.dat, utool.jar, and ace in the top directory.
+
 ## Team
 
 - Alexandre Rademaker
