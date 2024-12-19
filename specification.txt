@@ -111,3 +111,42 @@ will be serialized into:
 /* proper_q */ (?[n]:(name(n) & arg1(n)=X1 & arg2(n)=(s1 + " " + s2) & AA))
 ```
 
+the_q gets this translated from..
+
+```
+the_q(X, A(X), B)
+```
+
+to
+
+```
+?[S]:(S=^[s]:A(s) & size(S)=1 S(x) & B) 
+```
+#### Argument rewriting
+
+For non-quantifier predicates the rewriting below should be used.
+
+Respectively,
+
+pred(x)
+pred(x,b)
+pred(x,b,c)
+
+..should be rewritten as..
+
+pred(x)
+pred(x,arg1(x) = b)
+pred(x,arg1(x) = b,arg2(x) = c)
+
+..and so on.
+
+It can also be the case that the first set could have the form...
+
+pred(x)
+pred(b,x)
+pred(b,c,x) or pred(b,x,c) 
+
+..and the same output would occur.  In other words, ordering still matters for arg1/arg2/.. but only for the non-x variables.
+
+"x" is used as the first argument because it is important that the first variable listed be the first "x" variable in the argument list of pred.
+This may require some filtering for some predicates.  
