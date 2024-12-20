@@ -15,9 +15,25 @@
    - Universal quantifiers (every_q)
    - Definite quantifiers (the_q, def_explicit_q) 
    - Indefinite quantifiers (proper_q, udef_q, etc.)
-2. Universal quantifiers (every_q) must take wider scope than negations (both neg and never_a_1) when they interact
-3. Definite and indefinite quantifiers must not be fused or reordered relative to each other
-4. Definite quantifiers serialize to set/predicate forms
+2. Quantifier scope ordering from outer to inner:
+   - Indefinite quantifiers (proper_q, udef_q, etc.)
+   - Definite quantifiers (the_q, def_explicit_q)
+   - Universal quantifiers (every_q)
+   Example: ?[x](/* indefinite */ ?[S]:(/* definite */ ![y](/* universal */ ...)))
+3. Both scope patterns between universal quantifiers and negation must be preserved as they appear in the input:
+   - neg(every_q(...))
+   - every_q(neg(...))
+4. Definite quantifiers serialize to set/predicate forms. Specifically, the_q transforms from:
+
+```
+the_q(X, A(X), B)
+```
+
+to
+
+```
+?[S]:(S=^[s]:A(s) & size(S)=1 & S(x) & B) 
+```
 5. Indefinite quantifiers serialize to standard existential quantification (?[var])
 
 ## Transformation Pipeline
@@ -94,15 +110,3 @@ pred(b,c,x) or pred(b,x,c)
 
 "x" is used as the first argument because it is important that the first variable listed be the first "x" variable in the argument list of pred.
 This may require some filtering for some predicates.
-
-For quantifiers, the_q gets translated from:
-
-```
-the_q(X, A(X), B)
-```
-
-to
-
-```
-?[S]:(S=^[s]:A(s) & size(S)=1 & S(x) & B) 
-```
