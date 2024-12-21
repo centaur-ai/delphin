@@ -29,7 +29,6 @@ def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option
     let b2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "BODY")
     match x1, x2, b1, b2 with
     | some (_, var1), some (_, var2), some (_, body1), some (_, body2) =>
-      -- Use parent handle as label if this involves root
       let label := if pat.properQ1.label == parent || pat.properQ2.label == parent 
                    then parent 
                    else pat.properQ2.label
@@ -64,7 +63,6 @@ def getReferencedHandles (temps : List EP) : List Var :=
   handles
 
 def shouldRemoveWithRefs (p : EP) (pat : CompoundMatch) (referencedHandles : List Var) : Bool :=
-  -- Keep predicates whose handles are referenced by temp_compound_name
   if referencedHandles.contains p.label then
     dbg_trace ("Keeping " ++ toString p.label ++ " due to reference")
     false
@@ -73,8 +71,9 @@ def shouldRemoveWithRefs (p : EP) (pat : CompoundMatch) (referencedHandles : Lis
     dbg_trace ("Removing " ++ toString p.label ++ ": " ++ toString remove)
     remove
 
-def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars × Var) :=
-  dbg_trace ("phase1 starting with parent handle: " ++ toString parent)
+-- Phase 1: Process compound names into temp_compound_name
+def processCompoundNames (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars × Var) :=
+  dbg_trace ("Phase 1 - Processing compound names with parent handle: " ++ toString parent)
   dbg_trace ("Initial predicates: " ++ toString preds)
   
   let compounds := preds.filter fun p => 
@@ -88,7 +87,6 @@ def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP ×
   let temps := patterns.filterMap (makeTemp parent EliminatedVars.empty)
   dbg_trace ("Created temp compounds: " ++ toString temps)
   
-  -- Get all handles referenced by temp compounds
   let referencedHandles := getReferencedHandles temps
   dbg_trace ("Referenced handles: " ++ toString referencedHandles)
 
@@ -99,7 +97,6 @@ def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP ×
     patterns.filter (fun p => temps.any (fun t => t.predicate == "temp_compound_name"))
     |>.map (fun p => p.compound)
   
-  -- Keep predicates at referenced handles
   let remaining := preds.filter fun pred =>
     not (patterns.any (fun pat => shouldRemoveWithRefs pred pat referencedHandles))
   
@@ -123,8 +120,9 @@ def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP ×
 
   (remaining ++ temps, eliminatedVars, newRoot)
 
-def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula :=
-  dbg_trace ("phase2 entry - processing handle: " ++ toString handle)
+-- Phase 2: Convert temp_compound_name to Formula structure
+def rewriteTempCompound (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula :=
+  dbg_trace ("Phase 2 - Rewriting temp compounds for handle: " ++ toString handle)
   dbg_trace ("  parent handle was: " ++ toString parent)
   
   let allHandleRefs := preds.foldl (fun acc ep => 
@@ -168,14 +166,24 @@ def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars)
       some substituted
       |>.map Formula.removeEmptyConj
 
-def phase3 (f : Formula) : Formula :=
-  dbg_trace "Starting phase3"
-  dbg_trace s!"Phase3 input formula: {f}"
-  let minScoped := minimizeScoping f
-  dbg_trace s!"Phase3 output formula: {minScoped}" 
-  minScoped
+-- Phase 3: Convert X2 to X1 in predicates
+def substituteVariables (f : Formula) : Formula := 
+  dbg_trace "Phase 3 - Converting X2 to X1"
+  dbg_trace s!"Input formula: {f}"
+  -- Note: Variable substitution is actually handled in phase2's substitutions
+  -- This phase is kept for consistency with spec
+  f
 
-def phase4 (f : Formula) : String :=
+-- Phase 4: Perform minimum scoping
+def minimumScoping (f : Formula) : Formula :=
+  dbg_trace "Phase 4 - Minimum scoping"
+  dbg_trace s!"Input formula: {f}"
+  minimizeScoping f
+
+-- Phase 5: Serialize formula to PWL format
+def serializeFormula (f : Formula) : String :=
+  dbg_trace "Phase 5 - Serializing to PWL format"
+  dbg_trace s!"Input formula: {f}"
   formatAsPWL f none
 
 def updateHandleMap (preds : List EP) : Multimap Var EP :=
@@ -192,20 +200,23 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
              "\nHandle map contents: " ++ toString (hm.keys.map (fun k => (k, hm.find? k)))
   dbg_trace msg
   
-  let (p1preds, ev, newRoot) := phase1 handle preds hm
+  let (p1preds, ev, newRoot) := processCompoundNames handle preds hm
   dbg_trace "After phase1, updating handle map with temp compounds"
   let newHm := updateHandleMap p1preds 
   dbg_trace ("  new handle map size: " ++ toString newHm.keys.length)
   
-  match phase2 handle newRoot p1preds ev newHm with
+  match rewriteTempCompound handle newRoot p1preds ev newHm with
   | none => "!!! NO FORMULA GENERATED !!!"
   | some formula => 
-      dbg_trace "Phase2 output formula:"
+      dbg_trace "Phase 2 output formula:"
       dbg_trace s!"{formula}"
-      let minScoped := phase3 formula
-      dbg_trace "After phase3:"
+      let substituted := substituteVariables formula
+      dbg_trace "After phase 3 substitution:"
+      dbg_trace s!"{substituted}"
+      let minScoped := minimumScoping substituted
+      dbg_trace "After phase 4 minimum scoping:"
       dbg_trace s!"{minScoped}"
-      phase4 minScoped
+      serializeFormula minScoped
 
 end PWL.Transform
 
