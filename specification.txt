@@ -110,3 +110,21 @@ pred(b,c,x) or pred(b,x,c)
 
 "x" is used as the first argument because it is important that the first variable listed be the first "x" variable in the argument list of pred.
 This may require some filtering for some predicates.
+
+## Negation
+
+Negation has several forms:
+
+never_a_1(context,predicate)
+neg(context,predicate)
+
+The context argument (typically a "i" or "e" variable name) will be used as a scoping variable instead of an "x" variable.
+Negation will be immune from re-scoping as mentioned above.  It can be thought as a barrier.
+
+## Other highe-order forms
+
+colon_p_namely(e,h1,h2)
+
+Here "e" is used a scoping variable, and the handles like any other quantifier or negation will be expanded.
+
+
