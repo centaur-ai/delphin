@@ -1,20 +1,20 @@
-?[x29]:(/* proper_q */ ?[x3]:(/* some_q */ ((kill_v_1(x29) & arg1(x29)=e2) & person(x3) & (live_v_1(x3) & arg1(x3)=e8) & (in_p_loc(x16) & arg1(x16)=e8 & arg2(x16)=e9) & (named(x29) & arg1(x29)="Aunt Agatha"))))
+?[x29]:(/* proper_q */ ?[x3]:(/* some_q */ ((kill_v_1(x29) & arg1(x29)=e2) & person(x3) & (live_v_1(x3) & arg1(x3)=e8) & (in_p_loc(x16) & arg1(x16)=e8 & arg2(x16)=e9) & ?[n]:(name(n) & arg1(n)=x29 & arg2(n)="Aunt Agatha"))))
 /* --- */
-?[x38]:(/* proper_q */ ?[x8,x24]:(/* proper_q */ ?[x3,x14]:(/* udef_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x19) & size(S)=1 & S(x19) & ((live_v_1(x3) & arg1(x3)=e30) & (in_p_loc(x38) & arg1(x38)=e30 & arg2(x38)=e31) & (and_c(e45) & arg1(e45)=e30 & arg2(e45)=e2) & (be_v_id(x46) & arg1(x46)=e45) & implicit_conj(x14) & (named(x8) & arg1(x8)="Agatha") & (only_a_1(x46) & arg1(x46)=e51) & (people_n_of(x46) & arg1(x46)=i52) & (live_v_1(x46) & arg1(x46)=e53) & (therein_p_dir(e53) & arg1(e53)=e54) & and_c(x24) & (named(x24) & arg1(x24)="Charles") & (named(x38) & arg1(x38)="Dreadbury Mansion"))))))
+?[x38]:(/* proper_q */ ?[x8,x24]:(/* proper_q */ ?[x3,x14]:(/* udef_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x19) & size(S)=1 & S(x19) & ((live_v_1(x3) & arg1(x3)=e30) & (in_p_loc(x38) & arg1(x38)=e30 & arg2(x38)=e31) & (and_c(e45) & arg1(e45)=e30 & arg2(e45)=e2) & (be_v_id(x46) & arg1(x46)=e45) & implicit_conj(x14) & ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") & (only_a_1(x46) & arg1(x46)=e51) & (people_n_of(x46) & arg1(x46)=i52) & (live_v_1(x46) & arg1(x46)=e53) & (therein_p_dir(e53) & arg1(e53)=e54) & and_c(x24) & ?[n]:(name(n) & arg1(n)=x24 & arg2(n)="Charles") & ?[n]:(name(n) & arg1(n)=x38 & arg2(n)="Dreadbury Mansion"))))))
 /* --- */
 ?[x10]:(/* def_explicit_q */ ~(/* never_a_1(i23) */ ?[x3]:(/* a_q */ ?[x34,x16]:(/* pronoun_q */ ?[S]:(/* the_q */ S=^[s]:(victim_n_of(x28) & arg1(x28)=i39) & size(S)=1 & S(x28) & ((always_a_1(e9) & arg1(e9)=i8) & (hate_v_1(x10) & arg1(x10)=e9) & (and_c(e22) & arg1(e22)=e9 & arg2(e22)=e2) & (rich_a_in(x3) & arg1(x3)=i26 & arg2(x3)=e22) & (more_comp(x28) & arg1(x28)=e22 & arg2(x28)=e27) & (poss(x34) & arg1(x34)=e33) & killer_n_1(x3) & pron(x34) & (poss(x16) & arg1(x16)=e15) & (victim_n_of(x10) & arg1(x10)=i21) & pron(x16)))))))
 /* --- */
-?[x20]:(/* udef_q */ ?[x3,x15]:(/* proper_q */ ?[x9]:(/* no_q */ ((hate_v_1(x9) & arg1(x9)=e2) & (named(x3) & arg1(x3)="Charles") & person(x9) & (hate_v_1(x9) & arg1(x9)=e27) & (compound(x20) & arg1(x20)=e19) & (named(x15) & arg1(x15)="Agatha") & (aunt_n_of(x20) & arg1(x20)=i25)))))
+?[x20]:(/* udef_q */ ?[x3,x15]:(/* proper_q */ ?[x9]:(/* no_q */ ((hate_v_1(x9) & arg1(x9)=e2) & ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Charles") & person(x9) & (hate_v_1(x9) & arg1(x9)=e27) & (compound(x20) & arg1(x20)=e19) & ?[n]:(name(n) & arg1(n)=x15 & arg2(n)="Agatha") & (aunt_n_of(x20) & arg1(x20)=i25)))))
 /* --- */
-![x9]:(/* every_q */ ?[x3]:(/* proper_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x15) & size(S)=1 & S(x15) & ((hate_v_1(x9) & arg1(x9)=e2) & (named(x3) & arg1(x3)="Agatha") & person(x9) & (except_p(x15) & arg1(x15)=e14)))))
+![x9]:(/* every_q */ ?[x3]:(/* proper_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x15) & size(S)=1 & S(x15) & ((hate_v_1(x9) & arg1(x9)=e2) & ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Agatha") & person(x9) & (except_p(x15) & arg1(x15)=e14)))))
 /* --- */
-![x8]:(/* every_q */ ~(/* neg(e13) */ ?[x25]:(/* proper_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x3) & size(S)=1 & S(x3) & ((hate_v_1(x8) & arg1(x8)=e2) & person(x8) & (rich_a_in(x8) & arg1(x8)=i17 & arg2(x8)=e16) & (more_comp(x25) & arg1(x25)=e16 & arg2(x25)=e18) & (named(x25) & arg1(x25)="Aunt Agatha"))))))
+![x8]:(/* every_q */ ~(/* neg(e13) */ ?[x25]:(/* proper_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x3) & size(S)=1 & S(x3) & ((hate_v_1(x8) & arg1(x8)=e2) & person(x8) & (rich_a_in(x8) & arg1(x8)=i17 & arg2(x8)=e16) & (more_comp(x25) & arg1(x25)=e16 & arg2(x25)=e18) & ?[n]:(name(n) & arg1(n)=x25 & arg2(n)="Aunt Agatha"))))))
 /* --- */
-![x8]:(/* every_q */ ?[x14]:(/* proper_q */ ?[x19]:(/* udef_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x3) & size(S)=1 & S(x3) & ((hate_v_1(x8) & arg1(x8)=e2) & person(x8) & (hate_v_1(x8) & arg1(x8)=e26) & (compound(x19) & arg1(x19)=e18) & (named(x14) & arg1(x14)="Agatha") & (aunt_n_of(x19) & arg1(x19)=i24))))))
+![x8]:(/* every_q */ ?[x14]:(/* proper_q */ ?[x19]:(/* udef_q */ ?[S]:(/* the_q */ S=^[s]:butler_n_1(x3) & size(S)=1 & S(x3) & ((hate_v_1(x8) & arg1(x8)=e2) & person(x8) & (hate_v_1(x8) & arg1(x8)=e26) & (compound(x19) & arg1(x19)=e18) & ?[n]:(name(n) & arg1(n)=x14 & arg2(n)="Agatha") & (aunt_n_of(x19) & arg1(x19)=i24))))))
 /* --- */
 ![x8]:(/* every_q */ ?[x3]:(/* no_q */ ((hate_v_1(x8) & arg1(x8)=e2) & person(x3) & person(x8))))
 /* --- */
-~(/* neg(e11) */ ?[x10]:(/* the_q */ ?[x3]:(/* proper_q */ ((be_v_id(x10) & arg1(x10)=e2) & (named(x3) & arg1(x3)="Agatha") & butler_n_1(x10)))))
+~(/* neg(e11) */ ?[x10]:(/* the_q */ ?[x3]:(/* proper_q */ ((be_v_id(x10) & arg1(x10)=e2) & ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Agatha") & butler_n_1(x10)))))
 /* --- */
-?[x13]:(/* proper_q */ ((colon_p_namely(e9) & ?[x20]:(/* pronoun_q */ ((kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & (kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & (named(x13) & arg1(x13)="Agatha"))))))
+?[x13]:(/* proper_q */ ((colon_p_namely(e9) & ?[x20]:(/* pronoun_q */ ((kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & (kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & ?[n]:(name(n) & arg1(n)=x13 & arg2(n)="Agatha"))))))
 /* --- */
