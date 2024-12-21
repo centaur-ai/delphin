@@ -121,7 +121,7 @@ neg(context,predicate)
 The context argument (typically a "i" or "e" variable name) will be used as a scoping variable instead of an "x" variable.
 Negation will be immune from re-scoping as mentioned above.  It can be thought as a barrier.
 
-## Other highe-order forms
+## Other higher-order forms
 
 colon_p_namely(e,h1,h2)
 
