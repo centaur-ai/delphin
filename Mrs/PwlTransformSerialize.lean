@@ -30,7 +30,7 @@ partial def formatPredArgs (pred : String) (args : List (String × Var)) (carg :
     if pred == "named" || pred == "_named" then
       match carg with
       | some c => 
-        s!"({base}({xvar}) & arg1({xvar})=\"{removeQuotes c}\")"
+        s!"?[n]:(name(n) & arg1(n)={xvar} & arg2(n)=\"{removeQuotes c}\")"
       | none => s!"{base}({xvar})"
     else
       let nonXArgs := args.filter (fun p => p.2.sort ≠ 'x')

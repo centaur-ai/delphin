@@ -43,7 +43,7 @@ Should look for:
 1. proper_q(X1,..,A) 
 2. proper_q(X2,..,B)
 3. named(X1,s1)
-4. named(X2,s2)
+4. named(X2,s2)  
 5. compound(e,X1,X2)
 
 And rewrite this into:
@@ -73,7 +73,7 @@ Phase 3 converts X2 to X1, eliminating it from all predicates.
 Phase 4 performs minimum scoping, described above.
 
 ### Phase 5
-Phase 5 serializes as below.
+Phase 5 serializes as follows.
 
 A named predicate like:
 ```
@@ -83,10 +83,10 @@ named(X1,"London")
 will be serialized into:
 
 ```
-(named(X1) & arg1(X1)="London")
+?[n]:(name(n) & arg1(n)=X1 & arg2(n)="London")
 ```
 
-Respectively for non-quantifier predicates:
+For non-quantifier predicates:
 
 pred(x)
 pred(x,b)
@@ -119,12 +119,10 @@ never_a_1(context,predicate)
 neg(context,predicate)
 
 The context argument (typically a "i" or "e" variable name) will be used as a scoping variable instead of an "x" variable.
-Negation will be immune from re-scoping as mentioned above.  It can be thought as a barrier.
+Negation will be immune from re-scoping as mentioned above. It can be thought as a barrier.
 
 ## Other higher-order forms
 
 colon_p_namely(e,h1,h2)
 
 Here "e" is used a scoping variable, and the handles like any other quantifier or negation will be expanded.
-
-
