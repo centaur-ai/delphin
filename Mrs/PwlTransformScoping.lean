@@ -111,6 +111,37 @@ mutual
         | _, _ => 
           dbg_trace "Missing required args for negation"
           (none, stats))
+      
+      | "colon_p_namely" | "_colon_p_namely" =>
+        dbg_trace "Processing colon_p_namely predicate"
+        dbg_trace ("  at handle: " ++ toString ep.label)
+        dbg_trace ("  with args: " ++ toString ep.rargs)
+        match ep.rargs.find? (fun arg => arg.1 == "ARG1" || arg.1 == "ARG2"), 
+              ep.rargs.find? (fun arg => arg.1 == "ARG2"), 
+              ep.rargs.find? (fun arg => arg.1 == "ARG0") with
+        | some (_, handle1), some (_, handle2), some (_, evar) =>
+          dbg_trace ("  first handle arg: " ++ toString handle1)
+          dbg_trace ("  second handle arg: " ++ toString handle2)
+          dbg_trace ("  event arg: " ++ toString evar)
+          let innerPreds1 := hm.find? handle1 |>.getD []
+          let innerPreds2 := hm.find? handle2 |>.getD []
+          dbg_trace ("  inner preds for first handle: " ++ toString innerPreds1)
+          dbg_trace ("  inner preds for second handle: " ++ toString innerPreds2)
+          match processPredicates ep.label innerPreds1 newSeen hm stats ev with
+          | (none, stats1) => 
+            dbg_trace "  first handle inner processing returned none"
+            (none, stats1)
+          | (some inner1, stats1) =>
+            match processPredicates ep.label innerPreds2 newSeen hm stats1 ev with
+            | (none, stats2) =>
+              dbg_trace "  second handle inner processing returned none" 
+              (none, stats2)
+            | (some inner2, stats2) =>
+              dbg_trace ("  handle formulas: " ++ toString inner1 ++ ", " ++ toString inner2)
+              (some (Formula.scope [evar] (some ep.predicate) (Formula.conj [inner1, inner2])), addStat stats2 4)
+        | _, _, _ => 
+          dbg_trace "Missing required args for colon_p_namely"
+          (none, stats)
 
       | "temp_compound_name" =>
         dbg_trace s!"processEP: temp_compound_name with label {ep.label}"

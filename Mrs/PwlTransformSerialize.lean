@@ -109,11 +109,17 @@ partial def formatTheQ (vars : List Var) (inner : Formula) : String :=
       dbg_trace "No restriction found for the_q, using default format"  
       s!"?[{varList_toString vars}]:(/* the_q */ {formatAsPWL inner none})"
 
-partial def formatNegation (vars : List Var) (pred : String) (inner : Formula) : String :=
+partial def formatScopedPredicate (vars : List Var) (pred : String) (inner : Formula) : String :=
   let var := match vars with
   | [] => "ERROR_NO_VAR"
   | v :: _ => toString v
-  s!"~(/* {pred}({var}) */ {formatAsPWL inner none})"
+  if pred == "colon_p_namely" || pred == "_colon_p_namely" then
+    match inner with
+    | Formula.conj [f1, f2] =>
+      s!"((colon_p_namely({var}) & {formatAsPWL f1 none} & {formatAsPWL f2 none}))"
+    | _ => s!"((colon_p_namely({var}) & {formatAsPWL inner none}))"
+  else  -- neg case
+    s!"~(/* {pred}({var}) */ {formatAsPWL inner none})"
 
 partial def formatAsPWL (f : Formula) (boundVarOpt : Option Var) : String :=
   match f, boundVarOpt with 
@@ -127,9 +133,9 @@ partial def formatAsPWL (f : Formula) (boundVarOpt : Option Var) : String :=
     | "every_q" =>
       dbg_trace "formatAsPWL processing every_q"  
       s!"![{varList_toString vars}]:(/* every_q */ {formatAsPWL inner none})"
-    | "never_a_1" | "neg" =>
-      dbg_trace s!"formatAsPWL processing negation: {normalizedQuant}"
-      formatNegation vars normalizedQuant inner
+    | "never_a_1" | "neg" | "colon_p_namely" =>
+      dbg_trace s!"formatAsPWL processing scoped predicate: {normalizedQuant}"
+      formatScopedPredicate vars normalizedQuant inner
     | _ =>
       dbg_trace s!"formatAsPWL processing other quant: {normalizedQuant}"
       s!"?[{varList_toString vars}]:(/* {normalizedQuant} */ {formatAsPWL inner none})"

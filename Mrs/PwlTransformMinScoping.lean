@@ -17,6 +17,7 @@ inductive ScopeType
 | Indefinite     -- proper_q, udef_q, etc
 | NeverNeg       -- never_a_1 with its i variable
 | RegNeg         -- neg with its e variable
+| ColonNamely    -- colon_p_namely
 deriving Inhabited, BEq
 
 instance : ToString ScopeType where
@@ -26,6 +27,7 @@ instance : ToString ScopeType where
   | ScopeType.Indefinite => "Indefinite"
   | ScopeType.NeverNeg => "NeverNeg"
   | ScopeType.RegNeg => "RegNeg"
+  | ScopeType.ColonNamely => "ColonNamely"
 
 structure ScopeInfo where
   predicate : String
@@ -79,6 +81,9 @@ partial def getFormulaScopes : Formula → List ScopeInfo
     else if normalized == "neg" then
       dbg_trace s!"Found neg scope with vars: {vars}"
       ScopeType.RegNeg
+    else if normalized == "colon_p_namely" then
+      dbg_trace s!"Found colon_p_namely scope with vars: {vars}"
+      ScopeType.ColonNamely
     else
       ScopeType.Indefinite
   let info : ScopeInfo := {
@@ -116,8 +121,8 @@ mutual
         | some q =>
             let normalized := if q.startsWith "_" then q.drop 1 else q
             dbg_trace s!"buildMinimalFormula examining scope with quant: {normalized}"
-            if ["never_a_1", "neg"].contains normalized then
-              dbg_trace s!"Preserving negation scope for {normalized} with vars {vars}"
+            if ["never_a_1", "neg", "colon_p_namely"].contains normalized then
+              dbg_trace s!"Preserving scope for {normalized} with vars {vars}"
               Formula.scope vars (some normalized) (buildMinimalFormula preds inner)
             else Formula.scope vars quant (buildMinimalFormula preds inner)
         | none => Formula.scope vars none (buildMinimalFormula preds inner)
@@ -139,7 +144,7 @@ mutual
       
       let negScopes := scopes.filter fun si =>
         match si.scopeType with 
-        | ScopeType.NeverNeg | ScopeType.RegNeg => true
+        | ScopeType.NeverNeg | ScopeType.RegNeg | ScopeType.ColonNamely => true
         | _ => false
       dbg_trace s!"Found negation scopes: {negScopes}"
       
@@ -164,7 +169,7 @@ mutual
       let negVars := baseState.neededVars.filter (fun v =>
         scopes.any fun si =>
           match si.scopeType with
-          | ScopeType.NeverNeg | ScopeType.RegNeg => si.boundVars.contains v
+          | ScopeType.NeverNeg | ScopeType.RegNeg | ScopeType.ColonNamely => si.boundVars.contains v
           | _ => false)
 
       dbg_trace s!"Variables by type - Universal:{univVars} Definite:{defVars} Indefinite:{indefVars} Negation:{negVars}"
