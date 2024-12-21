@@ -42,6 +42,10 @@ def collectEliminatedVars (preds : List EP) : EliminatedVars :=
     else acc
   ) EliminatedVars.empty
 
+-- Modified to include both entity and event variables
+def getScopableArgs (ep : EP) : List (String × Var) :=
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e')
+
 mutual 
   partial def processPredicates (parent : Var) (eps : List EP) (seenHandles : List Var) 
       (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
@@ -203,5 +207,3 @@ mutual
 end
 
 end PWL.Transform.Scoping
-
-export PWL.Transform.Scoping (processPredicates processEP EliminatedVars isVarEliminated collectEliminatedVars EliminatedVars.empty)

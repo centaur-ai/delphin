@@ -53,11 +53,14 @@ partial def getPredicatesFromFormula : Formula → List EP
   | _ => fs.foldl (fun acc f => acc ++ getPredicatesFromFormula f) []
 | Formula.scope _ _ inner => getPredicatesFromFormula inner
 
-def getXVars (ep : EP) : List Var :=
-  dbg_trace s!"Extracting x-variables from EP: {ep}"
-  (ep.rargs.filter (·.2.sort == 'x')
-   |>.map (·.2)
-   |>.eraseDups)
+-- Get all variables from a predicate, including events in argument relations
+def getScopeVars (ep : EP) : List Var :=
+  dbg_trace s!"Extracting scopable variables from EP: {ep}"
+  let mainVars := (ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e')
+   |>.map (·.2))
+  let eventVars := (ep.rargs.filter (fun arg => arg.2.sort == 'e')
+   |>.map (·.2))
+  (mainVars ++ eventVars).eraseDups
 
 partial def getFormulaScopes : Formula → List ScopeInfo
 | Formula.atom _ => []  
@@ -131,7 +134,8 @@ mutual
       
       let baseState := preds.foldl (fun (state : FormulaState) (ep : EP) =>
         dbg_trace s!"Processing predicate: {ep}"
-        let varsUsed := getXVars ep
+        let varsUsed := getScopeVars ep
+        dbg_trace s!"Found variables: {varsUsed}"
         let newNeeded := varsUsed.filter (fun v => !state.declared.contains v)
         { state with
           neededVars := (state.neededVars ++ newNeeded).eraseDups,
@@ -148,33 +152,52 @@ mutual
         | _ => false
       dbg_trace s!"Found negation scopes: {negScopes}"
       
-      let univVars := baseState.neededVars.filter (fun v =>
+      let allVars := baseState.neededVars
+      
+      -- Split into entity and event variables
+      let entityVars := allVars.filter (fun v => v.sort == 'x')
+      let eventVars := allVars.filter (fun v => v.sort == 'e')
+
+      -- Group entity variables by scope type
+      let univVars := entityVars.filter (fun v =>
         scopes.any fun si => 
           match si.scopeType with
           | ScopeType.Universal => si.boundVars.contains v
           | _ => false)
       
-      let defVars := baseState.neededVars.filter (fun v =>
+      let defVars := entityVars.filter (fun v =>
         scopes.any fun si =>
           match si.scopeType with
           | ScopeType.Definite => si.boundVars.contains v
           | _ => false)
 
-      let indefVars := baseState.neededVars.filter (fun v =>
+      let indefVars := entityVars.filter (fun v =>
         scopes.any fun si =>
           match si.scopeType with
           | ScopeType.Indefinite => si.boundVars.contains v
           | _ => false)
 
-      let negVars := baseState.neededVars.filter (fun v =>
+      let negVars := entityVars.filter (fun v =>
         scopes.any fun si =>
           match si.scopeType with
           | ScopeType.NeverNeg | ScopeType.RegNeg | ScopeType.ColonNamely => si.boundVars.contains v
           | _ => false)
+          
+      -- Add event variables at the outermost scope
+      let withEvents := 
+        if eventVars.isEmpty then baseState.formula
+        else Formula.scope eventVars none baseState.formula
 
-      dbg_trace s!"Variables by type - Universal:{univVars} Definite:{defVars} Indefinite:{indefVars} Negation:{negVars}"
+      -- Build formula preserving order
+      let withUniv := 
+        if univVars.isEmpty then withEvents
+        else combineScopes univVars "every_q" withEvents
+      
+      let withDef := 
+        if defVars.isEmpty then withUniv
+        else combineScopes defVars "the_q" withUniv
 
-      -- Group variables by their quantifier type
+      -- Group indefinite vars by quantifier
       let quantMap := scopes.foldl (fun map si =>
         si.boundVars.foldl (fun m v => 
           match m.find? v with
@@ -189,15 +212,6 @@ mutual
           | some vars => acc.insert quant (v :: vars)
           | none => acc.insert quant [v]
         | none => acc) HashMap.empty
-
-      -- Build formula preserving negation and combining scopes
-      let withUniv := 
-        if univVars.isEmpty then baseState.formula
-        else combineScopes univVars "every_q" baseState.formula
-      
-      let withDef := 
-        if defVars.isEmpty then withUniv
-        else combineScopes defVars "the_q" withUniv
 
       -- Apply grouped indefinite scopes
       let withIndef := byQuant.toList.foldl (fun acc (quant, vars) =>

@@ -19,49 +19,50 @@ def varList_toString (vars : List Var) : String :=
   String.intercalate "," (vars.map toString)
 
 mutual 
-partial def findFirstXVar : List (String × Var) → Option Var :=
-  fun args => args.find? (fun p => p.snd.sort == 'x') |>.map (fun p => p.snd)
+-- Look for any scopable variable (x or e)
+partial def findScopableVar : List (String × Var) → Option Var :=
+  fun args => args.find? (fun p => p.snd.sort == 'x' || p.snd.sort == 'e') |>.map (fun p => p.snd)
 
 partial def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option String) : String :=
-  match findFirstXVar args with
-  | some xvar => 
-    dbg_trace s!"formatPredArgs found x-var: {xvar}"
-    let base := s!"{normalizePredicate pred}"
-    if pred == "named" || pred == "_named" then
-      match carg with
-      | some c => 
-        s!"?[n]:(name(n) & arg1(n)={xvar} & arg2(n)=\"{removeQuotes c}\")"
-      | none => s!"{base}({xvar})"
-    else
-      let nonXArgs := args.filter (fun p => p.2.sort ≠ 'x')
-      if nonXArgs.isEmpty then
-        s!"{base}({xvar})"
+  -- Special handling for named predicates first
+  if pred == "named" || pred == "_named" then
+    match args.find? (fun p => p.1 == "ARG0"), carg with
+    | some (_, var), some str => 
+      s!"?[n]:(name(n) & arg1(n)={var} & arg2(n)={str})"
+    | _, _ => s!"named({args.head!.2})" -- fallback
+  else
+    -- Handle all other predicates with event variable ordering
+    let orderedArgs := orderArgs args
+    
+    -- Find first event variable by ARG number
+    let firstEvent := orderedArgs.find? (fun a => a.2.sort == 'e')
+
+    match firstEvent, orderedArgs with
+    | none, [] => pred
+    | none, (firstArg :: restArgs) =>
+      -- No event variables - use original serialization
+      let base := s!"{pred}({firstArg.2})"
+      if restArgs.isEmpty then base
       else
-        let argStr := nonXArgs.foldl (fun (acc : String × Nat) (pair : String × Var) =>
+        let argStr := restArgs.foldl (fun (acc : String × Nat) (pair : String × Var) =>
           let argNum := acc.2
           let str := if acc.1.isEmpty 
-            then s!"arg{argNum}({xvar})={pair.2}"
-            else acc.1 ++ " & " ++ s!"arg{argNum}({xvar})={pair.2}"
+            then s!"arg{argNum}({firstArg.2})={pair.2}"
+            else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
           (str, argNum + 1)
         ) ("", 1)
-        s!"({base}({xvar}) & {argStr.1})"
-  | none =>
-    match args with 
-    | [] => 
-      dbg_trace s!"formatPredArgs no args for: {pred}"
-      normalizePredicate pred
-    | (_, first) :: rest =>
-      dbg_trace s!"formatPredArgs using first arg: {first}"
-      let base := s!"{normalizePredicate pred}({first})"
-      if rest.isEmpty then 
-        dbg_trace s!"formatPredArgs using base only: {base}"
-        base
-      else 
-        let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
+        s!"({base} & {argStr.1})"
+    | some eventArg, _ =>
+      -- Found event variable - use it as base and adjust other args
+      let otherArgs := orderedArgs.filter (fun a => a != eventArg)
+      let base := s!"{pred}({eventArg.2})"
+      if otherArgs.isEmpty then base
+      else
+        let argStr := otherArgs.foldl (fun (acc : String × Nat) (pair : String × Var) =>
           let argNum := acc.2
           let str := if acc.1.isEmpty 
-            then s!"arg{argNum}({first})={pair.2}"
-            else acc.1 ++ " & " ++ s!"arg{argNum}({first})={pair.2}"
+            then s!"arg{argNum}({eventArg.2})={pair.2}"
+            else acc.1 ++ " & " ++ s!"arg{argNum}({eventArg.2})={pair.2}"
           (str, argNum + 1)
         ) ("", 1)
         s!"({base} & {argStr.1})"
