@@ -66,20 +66,9 @@ def getCompoundPattern (preds : List EP) (c : EP) (hm : Multimap Var EP) : Optio
     else none
   | _ => none)
 
-inductive NegationType
-| Never (i : Var)           -- never_a_1 with its i argument
-| NegWithEvent (e : Var)    -- neg with its event argument
-deriving Inhabited, BEq
-
-instance : ToString NegationType where
-  toString
-  | NegationType.Never i => s!"never_a_1({i})"
-  | NegationType.NegWithEvent e => s!"neg({e})"
-
 inductive Formula where
   | atom : EP → Formula
   | conj : List Formula → Formula 
-  | neg : NegationType → Formula → Formula
   | scope : List Var → Option String → Formula → Formula
   deriving Inhabited
 
@@ -87,7 +76,6 @@ mutual
   partial def beqFormula : Formula → Formula → Bool
     | Formula.atom ep1, Formula.atom ep2 => ep1 == ep2
     | Formula.conj fs1, Formula.conj fs2 => beqFormulaList fs1 fs2
-    | Formula.neg nt1 f1, Formula.neg nt2 f2 => nt1 == nt2 && beqFormula f1 f2
     | Formula.scope vs1 q1 f1, Formula.scope vs2 q2 f2 =>
         vs1 == vs2 && q1 == q2 && beqFormula f1 f2
     | _, _ => false
@@ -108,7 +96,6 @@ mutual
   partial def formulaToString : Formula → String
     | Formula.atom ep => toString ep
     | Formula.conj fs => "(" ++ listFormulaToString fs ++ ")"
-    | Formula.neg nt f => "~(/* " ++ toString nt ++ " */ " ++ formulaToString f ++ ")"
     | Formula.scope vars none inner => s!"?[{vars}]: {formulaToString inner}"
     | Formula.scope vars (some q) inner => s!"?[{vars}]: /* {q} */ {formulaToString inner}"
 
@@ -159,7 +146,6 @@ partial def Formula.removeEmptyConj : Formula → Formula
     | [] => conj []
     | [f] => f.removeEmptyConj
     | fs => conj (fs.map Formula.removeEmptyConj)
-  | neg nt f => neg nt (f.removeEmptyConj)
   | scope vars quant inner => 
     scope vars quant (inner.removeEmptyConj)
 
@@ -179,9 +165,6 @@ partial def Formula.substitute (old new : Var) : Formula → Formula
   | conj fs => 
     dbg_trace "substitute in conj"
     conj (fs.map (Formula.substitute old new))
-  | neg nt f =>
-    dbg_trace "substitute in neg"
-    neg nt (f.substitute old new) 
   | scope vars quant inner => 
     dbg_trace s!"substitute in scope: vars {vars}"
     let newVars := vars.map fun v => if v == old then new else v

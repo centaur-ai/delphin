@@ -109,28 +109,30 @@ partial def formatTheQ (vars : List Var) (inner : Formula) : String :=
       dbg_trace "No restriction found for the_q, using default format"  
       s!"?[{varList_toString vars}]:(/* the_q */ {formatAsPWL inner none})"
 
+partial def formatNegation (vars : List Var) (pred : String) (inner : Formula) : String :=
+  let var := match vars with
+  | [] => "ERROR_NO_VAR"
+  | v :: _ => toString v
+  s!"~(/* {pred}({var}) */ {formatAsPWL inner none})"
+
 partial def formatAsPWL (f : Formula) (boundVarOpt : Option Var) : String :=
   match f, boundVarOpt with 
   | Formula.scope vars (some q) inner, _ => 
-    dbg_trace s!"formatAsPWL scope with vars: {vars}"
+    dbg_trace s!"formatAsPWL examining quant: {q}"
     let normalizedQuant := normalizePredicate q
-    dbg_trace s!"formatAsPWL examining quant: {normalizedQuant}"
-    if normalizedQuant == "the_q" then
+    match normalizedQuant with
+    | "the_q" =>
       dbg_trace "formatAsPWL processing the_q"
       formatTheQ vars inner
-    else if normalizedQuant == "every_q" then
+    | "every_q" =>
       dbg_trace "formatAsPWL processing every_q"  
       s!"![{varList_toString vars}]:(/* every_q */ {formatAsPWL inner none})"
-    else
+    | "never_a_1" | "neg" =>
+      dbg_trace s!"formatAsPWL processing negation: {normalizedQuant}"
+      formatNegation vars normalizedQuant inner
+    | _ =>
       dbg_trace s!"formatAsPWL processing other quant: {normalizedQuant}"
       s!"?[{varList_toString vars}]:(/* {normalizedQuant} */ {formatAsPWL inner none})"
-
-  | Formula.neg nt inner, _ =>
-    dbg_trace "formatAsPWL processing negation"
-    let negStr := match nt with
-      | NegationType.Never i => s!"never_a_1({i})"
-      | NegationType.NegWithEvent e => s!"neg({e})"
-    s!"~(/* {negStr} */ {formatAsPWL inner none})"
 
   | Formula.scope vars none inner, _ => 
     dbg_trace "formatAsPWL processing non-quant scope"
@@ -155,37 +157,8 @@ partial def formatAsPWL (f : Formula) (boundVarOpt : Option Var) : String :=
         dbg_trace s!"formatAsPWL found non-quantifier: {ep.predicate}"
         s!"({formatAsPWL (Formula.atom ep) boundVar} & {formatAsPWL (Formula.conj [rest]) boundVar})"
     | fs => s!"({String.intercalate " & " (fs.map (fun f => formatAsPWL f boundVar))})"
+
 end
-
-partial def substituteVar (oldVar newVar : Var) (f : Formula) : String :=
-  match f with
-  | Formula.atom ep =>
-    dbg_trace s!"substituteVar atom old: {oldVar} new: {newVar}"
-    let args := ep.rargs.map fun (s, v) => (s, if v == oldVar then newVar else v)
-    let args' := if args.any (fun (_, v) => v == newVar)
-      then args else args
-    formatPredArgs ep.predicate args' ep.carg
-
-  | Formula.conj [] => ""
-  | Formula.conj [f] => substituteVar oldVar newVar f
-  | Formula.conj fs => s!"({String.intercalate " & " (fs.map (substituteVar oldVar newVar))})"
-
-  | Formula.neg nt inner =>
-    dbg_trace s!"substituteVar negation old: {oldVar} new: {newVar}"
-    match nt with
-    | NegationType.Never i => s!"~(/* never_a_1({i}) */ {substituteVar oldVar newVar inner})"
-    | NegationType.NegWithEvent e => s!"~(/* neg({e}) */ {substituteVar oldVar newVar inner})"
-
-  | Formula.scope vars quant inner =>
-    dbg_trace s!"substituteVar scope vars: {vars}"
-    if vars.any (· == oldVar) then
-      dbg_trace "substituteVar skipping due to bound var"
-      formatAsPWL (Formula.scope vars quant inner) none
-    else 
-      match quant with
-      | none => s!"?[{varList_toString vars}]:({substituteVar oldVar newVar inner})"
-      | some "every_q" => s!"![{varList_toString vars}]:(/* every_q */ {substituteVar oldVar newVar inner})"
-      | some q => s!"?[{varList_toString vars}]:(/* {normalizePredicate q} */ {substituteVar oldVar newVar inner})"
 
 end PWL.Transform.Serialize
 
