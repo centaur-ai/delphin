@@ -16,5 +16,5 @@
 /* --- */
 ~(/* neg(e11) */ ?[x10]:(/* the_q */ ?[x3]:(/* proper_q */ ((be_v_id(x10) & arg1(x10)=e2) & (named(x3) & arg1(x3)="Agatha") & butler_n_1(x10)))))
 /* --- */
-?[x13]:(/* proper_q */ ((colon_p_namely(h22) & arg1(h22)=h6 & arg2(h22)=e9) & (named(x13) & arg1(x13)="Agatha")))
+?[x13]:(/* proper_q */ ((colon_p_namely(e9) & ?[x20]:(/* pronoun_q */ ((kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & (kill_v_1(x20) & arg1(x20)=e19) & pron(x20) & (named(x13) & arg1(x13)="Agatha"))))))
 /* --- */
