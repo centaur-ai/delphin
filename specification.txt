@@ -3,12 +3,15 @@
 ## Variable Scoping Rules
 
 ### Core Principles
-1. Only variables of type 'x' (entities) should be introduced with ?[var]
-2. Events ('e'), individuals ('i') and handles ('h') should NOT be scoped with ?[var]
-3. An 'x' variable can only be referenced within an enclosing scope that introduces it 
-4. Each entity variable's scope must be minimal while preserving access
-5. Independent entity variables can have parallel scopes
+1. Variables of type 'x' (entities), 'e' (events), and 'i' (individuals) must be explicitly scoped, with the type of scoping (?[var]: or ![var]:) determined by their quantifiers
+2. Handle ('h') variables will be eliminated through expansion
+3. A scoped variable can only be referenced within an enclosing scope that introduces it 
+4. Each variable's scope must be minimal while preserving access
+5. Independent variables can have parallel scopes
 6. Variables in inner scopes automatically have access to all variables from lexically enclosing scopes
+7. Predicates should be placed at the minimum scope necessary for their variable dependencies
+8. Each quantifier scope should introduce exactly one entity variable
+9. Event and individual variables should be grouped at the minimum required scope level
 
 ### Quantifier Types and Scoping  
 1. There are three classes of quantifiers that must be handled distinctly:
@@ -16,25 +19,81 @@
    - Definite quantifiers (the_q, def_explicit_q) 
    - Indefinite quantifiers (proper_q, udef_q, etc.)
 2. Quantifier scope ordering from outer to inner:
-   - Indefinite quantifiers (proper_q, udef_q, etc.)
-   - Definite quantifiers (the_q, def_explicit_q)
-   - Universal quantifiers (every_q)
-   Example: ?[x](/* indefinite */ ?[S]:(/* definite */ ![y](/* universal */ ...)))
+   Example: ?[x]:(/* proper_q */ ?[y]:(/* the_q */ ![z](/* every_q */ ...)))
 3. Both scope patterns between universal quantifiers and negation must be preserved as they appear in the input:
    - neg(every_q(...))
    - every_q(neg(...))
-4. Definite quantifiers serialize to set/predicate forms. Specifically, the_q transforms from:
-
+4. For predicates with multiple variable dependencies:
+   - Each predicate should be placed at the innermost scope where all its required variables are available
+   - Predicates that only depend on variables from outer scopes can be moved outward to that scope
+   - A predicate that connects variables from different scopes must remain at the innermost scope where all its variables are available
+5. Definite quantifiers serialize to set/predicate forms. Specifically, the_q transforms from:
 ```
 the_q(X, A(X), B)
 ```
-
 to
-
 ```
 ?[S]:(S=^[s]:A(s) & size(S)=1 & S(x) & B) 
 ```
-5. Indefinite quantifiers serialize to standard existential quantification (?[var])
+6. Indefinite quantifiers serialize to standard existential quantification (?[var])
+
+### Variable Scoping Rules
+1. Each variable must be properly introduced by appropriate scoping
+2. A variable's scope extends from its introduction to the end of its scope
+3. No variable can be referenced before its introduction
+4. The scope of each variable must be the minimum required while preserving all required access
+5. Independent variables can be scoped in parallel when their predicates don't interact
+6. Inner scopes have access to all variables from their enclosing scopes
+7. Event and individual variables should be introduced in groups based on their mutual dependencies:
+   - Variables that form part of the same predicate or connected chain of predicates should be introduced together
+   - Each variable group should be introduced at the scope where all their related variables are available
+
+### Formatting Rules
+1. Each new scope is introduced with:
+   - ?[var]: for existential quantification
+   - ![var]: for universal quantification
+2. Each scope increases indentation by two spaces
+3. After each scope opener, a comment indicating the quantifier type should appear in the format /* quantifier_name */
+4. Predicates within a scope should align with that scope's indentation level
+5. Closing parentheses should align with their opening scope level
+
+### Example
+The following example demonstrates the application of these scoping rules:
+```
+?[x38]:(/* proper_q */
+  ?[n]:(name(n) & arg1(n)=x38 & arg2(n)="Dreadbury Mansion") &
+  ?[x8]:(/* proper_q */
+    ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
+    ?[x24]:(/* proper_q */
+      ?[n]:(name(n) & arg1(n)=x24 & arg2(n)="Charles") &
+      ?[x14]:(/* udef_q */
+        ?[x3]:(/* udef_q */
+          (implicit_conj(x3) & arg1(x3)=x8 & arg2(x3)=x14) &
+          ?[e30,e31]:(
+            (_live_v_1(e30) & arg1(e30)=x3) &
+            (_in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x38)) &
+          ?[x19]:(/* udef_q */
+            _butler_n_1(x19) &
+            (_and_c(x14) & arg1(x14)=x19 & arg2(x14)=x24) &
+            ?[x46]:(/* the_q */ 
+              ?[e53,e54]:(
+                (_live_v_1(e53) & arg1(e53)=x46) &
+                (_therein_p_dir(e54) & arg1(e54)=e53)) &
+              ?[e51]:(_only_a_1(e51) & arg1(e51)=x46) &
+              ?[e2,e45]:(
+                (_and_c(e2) & arg1(e2)=e30 & arg2(e2)=e45) &
+                (_be_v_id(e45) & arg1(e45)=x3 & arg2(e45)=x46)) &
+              (_people_n_of(x46) & arg1(x46)=i52)))))))
+```
+
+This example shows:
+- Each variable is properly introduced and scoped
+- Named predicates appear immediately after their variable introductions
+- Event variables like (e30,e31), (e53,e54) are grouped based on their interdependencies
+- Predicates appear at the minimum scope where all their required variables are available
+- Complex predicates appear at the scope where all their required variables are available
+- Proper indentation shows scope nesting
+- Each quantifier has appropriate /* quantifier_name */ annotation
 
 ## Transformation Pipeline
 
@@ -62,26 +121,20 @@ proper_q(X1,named(X1,s1),A & B, carg=s1 + " " + s2)
 ```
 The Formula structure must capture the variable bindings, argument dependencies, and combined name string in a form that phase 3 can serialize appropriately.
 
-The data structure that represents predicates (EP) has a slot called CARG for named's string.
-Use this slot for storing the combined string. In this way, no new predicates need to be generated and the handle map can 
-remain fixed.
-
 ### Phase 3
 Phase 3 converts X2 to X1, eliminating it from all predicates.
 
 ### Phase 4
-Phase 4 performs minimum scoping, described above.
+Phase 4 performs minimum scoping as described above.
 
 ### Phase 5
-Phase 5 serializes as follows.
+Phase 5 serializes as follows:
 
 A named predicate like:
 ```
 named(X1,"London")
 ```
-
 will be serialized into:
-
 ```
 ?[n]:(name(n) & arg1(n)=X1 & arg2(n)="London")
 ```
@@ -118,7 +171,7 @@ Negation has several forms:
 never_a_1(context,predicate)
 neg(context,predicate)
 
-The context argument (typically a "i" or "e" variable name) will be used as a scoping variable instead of an "x" variable.
+The context argument (typically an "i" or "e" variable name) will be used as a scoping variable instead of an "x" variable.
 Negation will be immune from re-scoping as mentioned above. It can be thought as a barrier.
 
 ## Other higher-order forms
