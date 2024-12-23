@@ -1,7 +1,6 @@
 import Mrs.Basic
 import Mrs.PwlTypes
-import Mrs.PwlTransformShared
-import Util.InsertionSort
+import Mrs.PwlTransformShared 
 
 namespace PWL.Transform.MinScoping
 
@@ -53,7 +52,6 @@ partial def getPredicatesFromFormula : Formula → List EP
   | _ => fs.foldl (fun acc f => acc ++ getPredicatesFromFormula f) []
 | Formula.scope _ _ inner => getPredicatesFromFormula inner
 
--- Get all variables from a predicate, including events in argument relations
 def getScopeVars (ep : EP) : List Var :=
   dbg_trace s!"Extracting scopable variables from EP: {ep}"
   let mainVars := (ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e')
@@ -67,9 +65,7 @@ partial def getFormulaScopes : Formula → List ScopeInfo
 | Formula.conj fs => 
   match fs with
   | [] => []
-  | _ => 
-    dbg_trace "getFormulaScopes processing conjunction"
-    fs.foldl (fun acc f => acc ++ getFormulaScopes f) []
+  | _ => fs.foldl (fun acc f => acc ++ getFormulaScopes f) []
 | Formula.scope vars (some pred) inner => 
   dbg_trace s!"getFormulaScopes examining scope with predicate: {pred}"
   let normalized := if pred.startsWith "_" then pred.drop 1 else pred
@@ -100,12 +96,6 @@ partial def getFormulaScopes : Formula → List ScopeInfo
 | Formula.scope _ none inner => getFormulaScopes inner
 
 mutual
-  partial def combineScopes (vars : List Var) (quant : String) (inner : Formula) : Formula :=
-    dbg_trace s!"Combining scopes for {quant} with vars {vars}"
-    match vars with
-    | [] => inner
-    | _ => Formula.scope vars (some quant) inner
-
   partial def minimizeScopeRegion (f : Formula) : Formula :=
     dbg_trace s!"minimizeScopeRegion examining: {f}"
     match f with
@@ -188,34 +178,23 @@ mutual
         if eventVars.isEmpty then baseState.formula
         else Formula.scope eventVars none baseState.formula
 
-      -- Build formula preserving order
-      let withUniv := 
-        if univVars.isEmpty then withEvents
-        else combineScopes univVars "every_q" withEvents
+      -- Build formula while separating variables for one-to-one quantifier bindings
+      let withUniv := univVars.foldl (fun acc v => Formula.scope [v] (some "every_q") acc) withEvents
       
-      let withDef := 
-        if defVars.isEmpty then withUniv
-        else combineScopes defVars "the_q" withUniv
+      let withDef := defVars.foldl (fun acc v => Formula.scope [v] (some "the_q") acc) withUniv
 
-      -- Group indefinite vars by quantifier
+      -- Group indefinite vars by quantifier to preserve their specific types
       let quantMap := scopes.foldl (fun map si =>
         si.boundVars.foldl (fun m v => 
           match m.find? v with
           | none => m.insert v si.predicate
           | some _ => m) map) HashMap.empty
 
-      -- Group indefinite vars by quantifier
-      let byQuant := indefVars.foldl (fun acc v =>
+      -- Create individual scopes for each indefinite variable
+      let withIndef := indefVars.foldl (fun acc v =>
         match quantMap.find? v with
-        | some quant =>
-          match acc.find? quant with
-          | some vars => acc.insert quant (v :: vars)
-          | none => acc.insert quant [v]
-        | none => acc) HashMap.empty
-
-      -- Apply grouped indefinite scopes
-      let withIndef := byQuant.toList.foldl (fun acc (quant, vars) =>
-        combineScopes vars quant acc) withDef
+        | some quant => Formula.scope [v] (some quant) acc
+        | none => acc) withDef
 
       -- Apply negation scopes at the outermost level
       let withNeg := negScopes.foldl (fun acc scope =>
