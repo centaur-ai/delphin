@@ -104,13 +104,7 @@ mutual
     dbg_trace s!"Combining scopes for {quant} with vars {vars}"
     match vars with
     | [] => inner
-    | v :: vs => 
-      -- For entity variables, introduce one at a time
-      if v.sort == 'x' then
-        Formula.scope [v] (some quant) (combineScopes vs quant inner)
-      else
-        -- For event variables or others, keep original grouping behavior
-        Formula.scope vars (some quant) inner
+    | _ => Formula.scope vars (some quant) inner
 
   partial def minimizeScopeRegion (f : Formula) : Formula :=
     dbg_trace s!"minimizeScopeRegion examining: {f}"

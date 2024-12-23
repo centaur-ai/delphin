@@ -74,49 +74,38 @@ def shouldRemoveWithRefs (p : EP) (pat : CompoundMatch) (referencedHandles : Lis
 -- Phase 1: Process compound names into temp_compound_name
 def processCompoundNames (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars × Var) :=
   dbg_trace ("Phase 1 - Processing compound names with parent handle: " ++ toString parent)
-  dbg_trace ("Initial predicates: " ++ toString preds)
   
   let compounds := preds.filter fun p => 
     p.predicate == "compound" || p.predicate == "_compound"
-  dbg_trace ("Found compounds: " ++ toString compounds)
-  
+    
   let patterns := compounds.filterMap (fun c => getCompoundPattern preds c hm)
-  dbg_trace ("Found patterns: " ++ toString patterns)
-  dbg_trace ("Found pattern handles: " ++ toString (patterns.map (fun p => p.compound.label)))
-
+  
   let temps := patterns.filterMap (makeTemp parent EliminatedVars.empty)
-  dbg_trace ("Created temp compounds: " ++ toString temps)
   
   let referencedHandles := getReferencedHandles temps
-  dbg_trace ("Referenced handles: " ++ toString referencedHandles)
-
+  
+  -- Track all predicate labels to remove
+  let labelsToRemove := patterns.foldl (fun acc pat =>
+    [pat.compound.label, pat.properQ1.label, pat.properQ2.label, 
+     pat.named1.label, pat.named2.label] ++ acc) []
+    
   let rootInvolvedPatterns := patterns.filter (isCompoundInvolving parent)
-  dbg_trace ("Patterns involving root: " ++ toString rootInvolvedPatterns)
-
+  
   let eliminatedVars := collectEliminatedVars $
     patterns.filter (fun p => temps.any (fun t => t.predicate == "temp_compound_name"))
     |>.map (fun p => p.compound)
   
+  -- Filter out predicates whose labels should be removed
   let remaining := preds.filter fun pred =>
-    not (patterns.any (fun pat => shouldRemoveWithRefs pred pat referencedHandles))
-  
-  dbg_trace ("Remaining predicates: " ++ toString remaining)
+    !labelsToRemove.contains pred.label &&
+    !(referencedHandles.contains pred.label && 
+      (pred.predicate == "named" || pred.predicate == "_named"))
   
   let newRoot := 
-    if rootInvolvedPatterns.isEmpty then
-      dbg_trace ("Keeping root as " ++ toString parent)
-      parent
-    else
-      match temps.find? (fun t => t.label == parent) with
-      | some temp =>
-        dbg_trace ("Found new root temp_compound_name: " ++ toString temp)
-        temp.label
-      | none =>
-        dbg_trace ("No matching temp_compound_name for root, keeping " ++ toString parent)
-        parent
-
-  dbg_trace ("Final root handle: " ++ toString newRoot)
-  dbg_trace ("Final predicates: " ++ toString (remaining ++ temps))
+    if rootInvolvedPatterns.isEmpty then parent
+    else match temps.find? (fun t => t.label == parent) with
+         | some temp => temp.label
+         | none => parent
 
   (remaining ++ temps, eliminatedVars, newRoot)
 

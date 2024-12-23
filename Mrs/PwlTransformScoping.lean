@@ -97,6 +97,11 @@ mutual
       | (some formula, newStats) => (acc ++ [formula], newStats)
       | (none, newStats) => (acc, newStats)) ([], stats)
 
+  partial def isSimpleNamed (f : Formula) : Bool :=
+    match f with 
+    | Formula.atom ep => ep.predicate == "named" || ep.predicate == "_named"
+    | _ => false
+
   partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
       (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
     dbg_trace ("processEP starting with:")
@@ -192,7 +197,10 @@ mutual
                 dbg_trace ("  bFormula: " ++ toString bFormula)
                 let namedEP := EP.mk "named" none ep.label [("ARG0", x1)] (some name)
                 let rstr := Formula.atom namedEP
-                let substitutedAFormula := aFormula.substitute x2 x1
+                let substitutedAFormula := if isSimpleNamed aFormula then
+                  Formula.conj []  -- Skip simple named predicate
+                else 
+                  aFormula.substitute x2 x1
                 let substitutedBFormula := bFormula.substitute x2 x1
                 let body := Formula.conj [rstr, substitutedAFormula, substitutedBFormula]
                 dbg_trace ("  constructed body: " ++ toString body)
