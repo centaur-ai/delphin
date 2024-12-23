@@ -24,25 +24,41 @@ def orderPredicateArgs (args : List (String × Var)) : List (String × Var) :=
   args.filter (fun a => a.1.startsWith "ARG") |> insertionSort
 
 def isVarEliminated (ev : EliminatedVars) (v : Var) : Bool :=
+  dbg_trace s!"isVarEliminated checking {v} against list {ev.vars}"
   ev.vars.contains v
 
 def shouldEliminateHandle (hm : Multimap Var EP) (ev : EliminatedVars) (handle : Var) : Bool :=
   match hm.find? handle with
   | none => unreachable!  
   | some eps =>
+    dbg_trace s!"shouldEliminateHandle checking handle {handle}"
     eps.any fun ep =>
-      ep.rargs.any fun (_, v) => isVarEliminated ev v
+      dbg_trace s!"  checking EP {ep}"
+      ep.rargs.any fun (_, v) => 
+        let isElim := isVarEliminated ev v
+        dbg_trace s!"    arg {v} eliminated? {isElim}"
+        isElim
 
 def collectEliminatedVars (preds : List EP) : EliminatedVars :=
-  preds.foldl (fun acc ep =>
+  dbg_trace "collectEliminatedVars starting"
+  dbg_trace s!"Input predicates: {preds}"
+  let result := preds.foldl (fun acc ep =>
+    dbg_trace s!"Checking predicate: {ep.predicate}"
+    dbg_trace s!"  lastTwoChars: {lastTwoChars ep.predicate}"
+    dbg_trace s!"  args: {ep.rargs}"
     if lastTwoChars ep.predicate == "_q" then
       match ep.rargs with
-      | ("ARG0", v) :: _ => EliminatedVars.mk (v :: acc.vars)
-      | _ => acc
+      | ("ARG0", v) :: _ => 
+        dbg_trace s!"  found quantifier {ep.predicate}, adding {v}"
+        EliminatedVars.mk (v :: acc.vars)
+      | other => 
+        dbg_trace s!"  quantifier {ep.predicate} has unexpected args: {other}"
+        acc
     else acc
   ) EliminatedVars.empty
+  dbg_trace s!"collectEliminatedVars complete with {result.vars}"
+  result
 
--- Modified to include both entity and event variables
 def getScopableArgs (ep : EP) : List (String × Var) :=
   ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e')
 
@@ -53,6 +69,7 @@ mutual
     dbg_trace ("  parent handle: " ++ toString parent)
     dbg_trace ("  predicates to process: " ++ toString eps)
     dbg_trace ("  seen handles: " ++ toString seenHandles)
+    dbg_trace ("  eliminated vars: " ++ toString ev.vars)
     
     let handleRefs := eps.foldl (fun acc ep => 
       ep.rargs.foldl (fun acc2 (name, v) => 
@@ -86,6 +103,7 @@ mutual
     dbg_trace ("  parent: " ++ toString parent)
     dbg_trace ("  ep: " ++ toString ep)
     dbg_trace ("  seen handles: " ++ toString seenHandles)
+    dbg_trace ("  eliminated vars: " ++ toString ev.vars)
     
     (if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
       dbg_trace "  skipping due to seen/eliminated handle"
@@ -156,11 +174,17 @@ mutual
           let bPreds := hm.find? b |>.getD []
           dbg_trace ("Looking up handle " ++ toString b ++ " in handleMap; found preds: " ++ toString bPreds)
           (match processPredicates ep.label aPreds newSeen hm stats ev with
-          | (none, stats1) => (none, stats1)
+          | (none, stats1) => 
+            dbg_trace "  a handle processing returned none"
+            (none, stats1)
           | (some aFormula, stats1) =>
+            dbg_trace s!"  a handle returned formula: {aFormula}"
             (match processPredicates ep.label bPreds newSeen hm stats1 ev with
-            | (none, stats2) => (none, stats2) 
+            | (none, stats2) => 
+              dbg_trace "  b handle processing returned none"
+              (none, stats2) 
             | (some bFormula, stats2) =>
+              dbg_trace s!"  b handle returned formula: {bFormula}"
               (match ep.carg with
               | some name =>
                 dbg_trace ("SCOPE: temp_compound at " ++ toString ep.label)
@@ -168,12 +192,17 @@ mutual
                 dbg_trace ("  bFormula: " ++ toString bFormula)
                 let namedEP := EP.mk "named" none ep.label [("ARG0", x1)] (some name)
                 let rstr := Formula.atom namedEP
+                let substitutedAFormula := aFormula.substitute x2 x1
                 let substitutedBFormula := bFormula.substitute x2 x1
-                let body := Formula.conj [rstr, substitutedBFormula]
+                let body := Formula.conj [rstr, substitutedAFormula, substitutedBFormula]
                 dbg_trace ("  constructed body: " ++ toString body)
                 (some (Formula.scope [x1] (some "proper_q") body), addStat stats2 1)
-              | none => (none, stats2))))
-        | _ => (none, stats))
+              | none => 
+                dbg_trace "  temp_compound missing CARG"
+                (none, stats2))))
+        | _ => 
+          dbg_trace "Invalid temp_compound_name args"
+          (none, stats))
 
       | p =>
         (if lastTwoChars p == "_q" then
@@ -203,7 +232,9 @@ mutual
                 dbg_trace s!"  BODY result: {bodyFormula}"
                 dbg_trace s!"Building final scope for {p} with arg0 {arg0}"
                 (some (Formula.scope [arg0] (some p) (Formula.conj [rstrFormula, bodyFormula])), addStat stats2 3))))
-        else (some (Formula.atom ep), stats))))
+        else 
+          dbg_trace "Processing non-quantifier predicate"
+          (some (Formula.atom ep), stats))))
 end
 
 end PWL.Transform.Scoping
