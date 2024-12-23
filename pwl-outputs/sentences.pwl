@@ -1,7 +1,7 @@
 ?[x29]:(/* proper_q */
   ?[x3]:(/* some_q */
     ?[x16]:(/* proper_q */
-      ?[e8,e9,e2]:(
+      ?[e2,e8,e9]:(
         ((_kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x29) &
         person(x3) &
         (_live_v_1(e8) & arg1(e8)=x3) &
@@ -16,7 +16,7 @@
         ?[x24]:(/* proper_q */
           ?[x46]:(/* the_q */
               ?[x19]:(/* the_q */
-                  ?[e53,e54,e51,e45,e30,e2,e31]:(
+                  ?[e2,e30,e31,e45,e51,e53,e54]:(
                     ((_live_v_1(e30) & arg1(e30)=x3) &
                     (_in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x38) &
                     (_and_c(e2) & arg1(e2)=e30 & arg2(e2)=e45) &
@@ -38,7 +38,7 @@
       ?[x34]:(/* pronoun_q */
         ?[x16]:(/* pronoun_q */
           ?[x28]:(/* the_q */
-              ?[e15,e33,e22,e27,e9,e2]:(
+              ?[e2,e9,e15,e22,e27,e33]:(
                 ((_always_a_1(e9) & arg1(e9)=i8) &
                 (_hate_v_1(e9) & arg1(e9)=x3 & arg2(e9)=x10) &
                 (_and_c(e2) & arg1(e2)=e9 & arg2(e2)=e22) &
@@ -56,7 +56,7 @@
   ?[x3]:(/* proper_q */
     ?[x9]:(/* no_q */
       ?[x15]:(/* proper_q */
-        ?[e19,e27,e2]:(
+        ?[e2,e19,e27]:(
           ((_hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9) &
           ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Charles") &
           person(x9) &
@@ -68,7 +68,7 @@
 ![x9]:(/* every_q */
   ?[x3]:(/* proper_q */
     ?[x15]:(/* the_q */
-        ?[e14,e2]:(
+        ?[e2,e14]:(
           ((_hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9) &
           ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Agatha") &
           person(x9) &
@@ -79,7 +79,7 @@
   ~(/* neg(e13) */
     ?[x25]:(/* proper_q */
       ?[x3]:(/* the_q */
-          ?[e16,e18,e2]:(
+          ?[e2,e16,e18]:(
             ((_hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8) &
             _butler_n_1(x3) &
             person(x8) &
@@ -91,7 +91,7 @@
   ?[x14]:(/* proper_q */
     ?[x19]:(/* udef_q */
       ?[x3]:(/* the_q */
-          ?[e18,e26,e2]:(
+          ?[e2,e18,e26]:(
             ((_hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8) &
             _butler_n_1(x3) &
             person(x8) &
