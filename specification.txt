@@ -3,15 +3,18 @@
 ## Variable Scoping Rules
 
 ### Core Principles
-1. Variables of type 'x' (entities), 'e' (events), and 'i' (individuals) must be explicitly scoped, with the type of scoping (?[var]: or ![var]:) determined by their quantifiers
-2. Handle ('h') variables will be eliminated through expansion
-3. A scoped variable can only be referenced within an enclosing scope that introduces it 
-4. Each variable's scope must be minimal while preserving access
-5. Independent variables can have parallel scopes
-6. Variables in inner scopes automatically have access to all variables from lexically enclosing scopes
-7. Predicates should be placed at the minimum scope necessary for their variable dependencies
-8. Each quantifier scope should introduce exactly one entity variable
-9. Event and individual variables should be grouped at the minimum required scope level
+### Variable Scoping Rules
+1. Each variable must be properly introduced by appropriate scoping
+2. A variable's scope extends from its introduction to the end of its scope
+3. No variable can be referenced before its introduction
+4. The scope of each variable must be the minimum required while preserving all required access
+5. Independent variables can be scoped in parallel when their predicates don't interact
+6. Inner scopes have access to all variables from their enclosing scopes
+7. Event and individual variables should be introduced in groups based on their mutual dependencies:
+   - Variables that form part of the same predicate or connected chain of predicates should be introduced together
+   - Each variable group should be introduced at the scope where all their related variables are available
+8. If an event variable appears multiple times in the input, each instance must be introduced in the appropriate part of the minimum scoping. However, the scoping process itself must not introduce additional copies of event variables
+9. The scoping process must not introduce duplicate predicates. However, if predicates are duplicated in the input, those duplicates should be preserved in their appropriate scopes
 
 ### Quantifier Types and Scoping  
 1. There are three classes of quantifiers that must be handled distinctly:
