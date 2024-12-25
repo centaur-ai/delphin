@@ -30,14 +30,39 @@
    - Each predicate should be placed at the innermost scope where all its required variables are available
    - Predicates that only depend on variables from outer scopes can be moved outward to that scope
    - A predicate that connects variables from different scopes must remain at the innermost scope where all its variables are available
-5. Definite quantifiers serialize to set/predicate forms. Specifically, the_q transforms from:
-```
-the_q(X, A(X), B)
-```
-to
-```
-?[S]:(S=^[s]:size(S)=1 & S(x) & A(s) & B) 
-```
+5. Definite quantifiers serialize to set/predicate forms. Specifically:
+
+   a. the_q transforms from:
+   ```
+   the_q(X, A(X), B)
+   ```
+   to
+   ```
+   ?[S]:(S=^[s]:size(S)=1 & S(x) & A(s) & B) 
+   ```
+
+   b. Conjunctions of X-type variables transform from:
+   ```
+   and_c(x14, x19, x24)        [where x14=ARG0, x19=ARG1, x24=ARG2]
+   ```
+   to
+   ```
+   ?[S]:(/* and_c */
+     S=^[x14]:
+       (x14=x19 | x14=x24))
+   ```
+
+   c. Implicit conjunctions of X-type variables transform from:
+   ```
+   implicit_conj(x3, x8, x14)   [where x3=ARG0, x8=ARG1, x14=ARG2]
+   ```
+   to
+   ```
+   ?[S]:(/* implicit_conj */
+     S=^[x3]:
+       (x3=x8 | x3=x14))
+   ```
+
 6. Indefinite quantifiers serialize to standard existential quantification (?[var])
 
 ### Variable Scoping Rules

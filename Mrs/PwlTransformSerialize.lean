@@ -1,7 +1,7 @@
 import Mrs.Basic
 import Mrs.PwlTypes
-import Mrs.PwlTransformScoping
 import Mrs.PwlTransformShared
+import Mrs.PwlTransformScoping
 import Mrs.PwlTransformMinScoping
 import Mrs.Hof
 import Util.InsertionSort
@@ -80,6 +80,23 @@ mutual
       let innerFormatted := formatAsPWL inner none (ind + 4) false false
       s!"{baseIndent}?[S]:(/* the_q */\n{contentIndent}S=^[s]:\n{innerIndent}size(S)=1 & S({x}) &\n{innerFormatted}"
 
+  partial def formatConjunction (ep : EP) (ind : Nat) : String :=
+    let baseIndent := String.mk (List.replicate ind ' ')
+    match ep.predicate with
+    | "implicit_conj" | "_implicit_conj" | "and_c" | "_and_c" => 
+      -- Extract ARG1 and ARG2
+      let arg0 := ep.rargs.find? (fun p => p.1 == "ARG0")
+      let arg1 := ep.rargs.find? (fun p => p.1 == "ARG1")
+      let arg2 := ep.rargs.find? (fun p => p.1 == "ARG2")
+      match arg0, arg1, arg2 with 
+      | some (_, x), some (_, x1), some (_, x2) =>
+        if x.sort == 'x' && x1.sort == 'x' && x2.sort == 'x' then
+          s!"{baseIndent}?[S]:(\n{baseIndent}  S=^[x]:\n{baseIndent}    (x={x1} | x={x2}))"
+        else
+          s!"{baseIndent}({ep.predicate}({x}) & arg1({x})={x1} & arg2({x})={x2})"
+      | _, _, _ => s!"{baseIndent}{ep.predicate}"
+    | _ => s!"{baseIndent}{ep.predicate}"
+
   partial def processArgs (args : List (String × Var)) : ArgInfo :=
     let ordered := args.filter (fun a => a.1.startsWith "ARG") |> insertionSort
     match ordered with
@@ -95,24 +112,40 @@ mutual
         s!"{indentStr}name(n) & arg1(n)={var} & arg2(n)={str}"
       | _, _ =>
         s!"{indentStr}named({args.head!.2})"
-    else
-      let argInfo := processArgs args
-      match argInfo with
-      | { firstArg := none, otherArgs := [] } =>
-        indentStr ++ normalizePredicate pred
-      | { firstArg := some firstArg, otherArgs := [] } =>
-        s!"{indentStr}{normalizePredicate pred}({firstArg.2})"
-      | { firstArg := some firstArg, otherArgs := rest } =>
-        let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
-          let argNum := acc.2
-          let str := if acc.1.isEmpty
-            then s!"arg{argNum}({firstArg.2})={pair.2}"
-            else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
-          (str, argNum + 1)
-        ) ("", 1)
-        s!"{indentStr}({normalizePredicate pred}({firstArg.2}) & {argStr.1})"
-      | { firstArg := none, otherArgs := rest } =>
-        s!"{indentStr}{normalizePredicate pred}({rest.head!.2})"
+    else 
+      let normalizedPred := normalizePredicate pred
+      if (normalizedPred == "implicit_conj" || normalizedPred == "and_c") && args.all (fun arg => arg.2.sort == 'x') then
+        -- Get the arguments
+        let arg0 := args.find? (fun arg => arg.1 == "ARG0")
+        let arg1 := args.find? (fun arg => arg.1 == "ARG1")
+        let arg2 := args.find? (fun arg => arg.1 == "ARG2") 
+        match arg0, arg1, arg2 with
+        | some (_, v0), some (_, v1), some (_, v2) =>
+          s!"{indentStr}?[S]:(/* {normalizedPred} */\n{indentStr}  S=^[{v0}]:\n{indentStr}    ({v0}={v1} | {v0}={v2}))"
+        | _, _, _ => formatNormalPredArgs pred args carg indent inParen
+      else
+        formatNormalPredArgs pred args carg indent inParen
+
+  partial def formatNormalPredArgs (pred : String) (args : List (String × Var)) (carg : Option String)
+                            (indent : Nat) (inParen : Bool) : String :=
+    let indentStr := String.mk (List.replicate indent ' ')
+    let argInfo := processArgs args
+    match argInfo with
+    | { firstArg := none, otherArgs := [] } =>
+      indentStr ++ normalizePredicate pred
+    | { firstArg := some firstArg, otherArgs := [] } =>
+      s!"{indentStr}{normalizePredicate pred}({firstArg.2})"
+    | { firstArg := some firstArg, otherArgs := rest } =>
+      let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
+        let argNum := acc.2
+        let str := if acc.1.isEmpty
+          then s!"arg{argNum}({firstArg.2})={pair.2}"
+          else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
+        (str, argNum + 1)
+      ) ("", 1)
+      s!"{indentStr}({normalizePredicate pred}({firstArg.2}) & {argStr.1})"
+    | { firstArg := none, otherArgs := rest } =>
+      s!"{indentStr}{normalizePredicate pred}({rest.head!.2})"
 
 end
 

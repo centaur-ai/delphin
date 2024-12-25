@@ -38,8 +38,12 @@
                           name(n) & arg1(n)=x38 & arg2(n)="Dreadbury Mansion" &
                           ?[e31]:(
                             (in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x38) &
-                            (and_c(x14) & arg1(x14)=x19 & arg2(x14)=x24) &
-                            (implicit_conj(x3) & arg1(x3)=x8 & arg2(x3)=x14) &
+                            ?[S]:(/* and_c */
+                              S=^[x14]:
+                                (x14=x19 | x14=x24)) &
+                            ?[S]:(/* implicit_conj */
+                              S=^[x3]:
+                                (x3=x8 | x3=x14)) &
                             (be_v_id(e45) & arg1(e45)=x3 & arg2(e45)=x46)
 /* --- */
 ?[x28]:(/* def_explicit_q */
