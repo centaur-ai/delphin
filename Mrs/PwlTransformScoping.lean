@@ -60,7 +60,7 @@ def collectEliminatedVars (preds : List EP) : EliminatedVars :=
   result
 
 def getScopableArgs (ep : EP) : List (String × Var) :=
-  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e')
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
 
 mutual 
   partial def processPredicates (parent : Var) (eps : List EP) (seenHandles : List Var) 
@@ -141,33 +141,35 @@ mutual
       
       | "colon_p_namely" | "_colon_p_namely" =>
         dbg_trace "Processing colon_p_namely predicate"
-        dbg_trace ("  at handle: " ++ toString ep.label)
-        dbg_trace ("  with args: " ++ toString ep.rargs)
-        match ep.rargs.find? (fun arg => arg.1 == "ARG1" || arg.1 == "ARG2"), 
-              ep.rargs.find? (fun arg => arg.1 == "ARG2"), 
-              ep.rargs.find? (fun arg => arg.1 == "ARG0") with
-        | some (_, handle1), some (_, handle2), some (_, evar) =>
-          dbg_trace ("  first handle arg: " ++ toString handle1)
-          dbg_trace ("  second handle arg: " ++ toString handle2)
-          dbg_trace ("  event arg: " ++ toString evar)
+        dbg_trace s!"  at handle: {ep.label}"
+        dbg_trace s!"  with args: {ep.rargs}"
+        match ep.rargs.find? (fun arg => arg.1 == "ARG0"), 
+              ep.rargs.find? (fun arg => arg.1 == "ARG1"), 
+              ep.rargs.find? (fun arg => arg.1 == "ARG2") with
+        | some (_, evar), some (_, handle1), some (_, handle2) =>
+          dbg_trace s!"  event arg: {evar}"
+          dbg_trace s!"  first handle: {handle1}"
+          dbg_trace s!"  second handle: {handle2}"
           let innerPreds1 := hm.find? handle1 |>.getD []
           let innerPreds2 := hm.find? handle2 |>.getD []
-          dbg_trace ("  inner preds for first handle: " ++ toString innerPreds1)
-          dbg_trace ("  inner preds for second handle: " ++ toString innerPreds2)
-          match processPredicates ep.label innerPreds1 newSeen hm stats ev with
+          dbg_trace s!"  first preds: {innerPreds1}"
+          dbg_trace s!"  second preds: {innerPreds2}"
+          match processPredicates handle1 innerPreds1 newSeen hm stats ev with
           | (none, stats1) => 
-            dbg_trace "  first handle inner processing returned none"
+            dbg_trace "  first handle processing returned none"
             (none, stats1)
-          | (some inner1, stats1) =>
-            match processPredicates ep.label innerPreds2 newSeen hm stats1 ev with
+          | (some part1, stats1) =>
+            match processPredicates handle2 innerPreds2 newSeen hm stats1 ev with
             | (none, stats2) =>
-              dbg_trace "  second handle inner processing returned none" 
+              dbg_trace "  second handle processing returned none" 
               (none, stats2)
-            | (some inner2, stats2) =>
-              dbg_trace ("  handle formulas: " ++ toString inner1 ++ ", " ++ toString inner2)
-              (some (Formula.scope [evar] (some ep.predicate) (Formula.conj [inner1, inner2])), addStat stats2 4)
+            | (some part2, stats2) =>
+              dbg_trace s!"  part1: {part1}"
+              dbg_trace s!"  part2: {part2}"
+              (some (Formula.scope [evar] none (Formula.conj [part1, part2])), 
+               addStat stats2 4)
         | _, _, _ => 
-          dbg_trace "Missing required args for colon_p_namely"
+          dbg_trace "  missing required arguments"
           (none, stats)
 
       | "temp_compound_name" =>
@@ -246,3 +248,4 @@ mutual
 end
 
 end PWL.Transform.Scoping
+

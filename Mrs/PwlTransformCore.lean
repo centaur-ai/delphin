@@ -17,11 +17,8 @@ open HOF (lastTwoChars)
 open PWL.Transform.Scoping (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle processPredicates)
 
 def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option EP :=
-  dbg_trace ("Making temp_compound_name with: pat.properQ1=" ++ toString pat.properQ1 ++
-             " pat.properQ2=" ++ toString pat.properQ2 ++
-             " pat.named1=" ++ toString pat.named1 ++
-             " pat.named2=" ++ toString pat.named2)
-  match pat.named1.carg, pat.named2.carg with
+  dbg_trace s!"Making temp_compound_name with: pat.properQ1={pat.properQ1} pat.properQ2={pat.properQ2} pat.named1={pat.named1} pat.named2={pat.named2}"
+  match pat.named1.carg, pat.named2.carg with 
   | some s1, some s2 =>
     let x1 := pat.properQ1.rargs.find? (fun arg => arg.1 == "ARG0")
     let x2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "ARG0")
@@ -32,7 +29,7 @@ def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option
       let label := if pat.properQ1.label == parent || pat.properQ2.label == parent 
                    then parent 
                    else pat.properQ2.label
-      dbg_trace ("Creating temp_compound_name with label: " ++ toString label)
+      dbg_trace s!"Creating temp_compound_name with label: {label}"
       some (EP.mk "temp_compound_name" none label
         [("X1", var1), ("X2", var2), ("A", body1), ("B", body2)]
         (some ("\"" ++ removeExtraQuotes s1 ++ " " ++ removeExtraQuotes s2 ++ "\"")))
@@ -40,9 +37,9 @@ def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option
   | _, _ => none
 
 def isCompoundInvolving (parent : Var) (pat : CompoundMatch) : Bool :=
-  dbg_trace ("Checking if compound involves parent " ++ toString parent)
-  dbg_trace ("  properQ1: " ++ toString pat.properQ1)
-  dbg_trace ("  properQ2: " ++ toString pat.properQ2)
+  dbg_trace s!"Checking if compound involves parent {parent}"
+  dbg_trace s!"  properQ1: {pat.properQ1}"
+  dbg_trace s!"  properQ2: {pat.properQ2}"
   let isParentLabel := pat.properQ1.label == parent || pat.properQ2.label == parent
   let isParentBody := 
     (match pat.properQ1.rargs.find? (fun arg => arg.1 == "BODY") with
@@ -51,7 +48,7 @@ def isCompoundInvolving (parent : Var) (pat : CompoundMatch) : Bool :=
     (match pat.properQ2.rargs.find? (fun arg => arg.1 == "BODY") with
     | some (_, body) => body == parent
     | none => false)
-  dbg_trace ("  isParentLabel: " ++ toString isParentLabel ++ ", isParentBody: " ++ toString isParentBody)
+  dbg_trace s!"  isParentLabel: {isParentLabel}, isParentBody: {isParentBody}"
   isParentLabel || isParentBody
 
 def getReferencedHandles (temps : List EP) : List Var :=
@@ -59,21 +56,21 @@ def getReferencedHandles (temps : List EP) : List Var :=
     match ep.rargs with
     | ("X1", _) :: ("X2", _) :: ("A", a) :: ("B", b) :: _ => a :: b :: acc
     | _ => acc) []
-  dbg_trace ("Referenced handles from temps: " ++ toString handles)
+  dbg_trace s!"Referenced handles from temps: {handles}"
   handles
 
 def shouldRemoveWithRefs (p : EP) (pat : CompoundMatch) (referencedHandles : List Var) : Bool :=
   if referencedHandles.contains p.label then
-    dbg_trace ("Keeping " ++ toString p.label ++ " due to reference")
+    dbg_trace s!"Keeping {p.label} due to reference"
     false
   else
     let remove := shouldRemove p pat
-    dbg_trace ("Removing " ++ toString p.label ++ ": " ++ toString remove)
+    dbg_trace s!"Removing {p.label}: {remove}"
     remove
 
 -- Phase 1: Process compound names into temp_compound_name
 def processCompoundNames (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars × Var) :=
-  dbg_trace ("Phase 1 - Processing compound names with parent handle: " ++ toString parent)
+  dbg_trace s!"Phase 1 - Processing compound names with parent handle: {parent}"
   
   let compounds := preds.filter fun p => 
     p.predicate == "compound" || p.predicate == "_compound"
@@ -111,28 +108,28 @@ def processCompoundNames (parent : Var) (preds : List EP) (hm : Multimap Var EP)
 
 -- Phase 2: Convert temp_compound_name to Formula structure
 def rewriteTempCompound (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula :=
-  dbg_trace ("Phase 2 - Rewriting temp compounds for handle: " ++ toString handle)
-  dbg_trace ("  parent handle was: " ++ toString parent)
+  dbg_trace s!"Phase 2 - Rewriting temp compounds for handle: {handle}"
+  dbg_trace s!"  parent handle was: {parent}"
   
   let allHandleRefs := preds.foldl (fun acc ep => 
     ep.rargs.foldl (fun acc2 (name, v) => if v.sort == 'h' then (ep.label, name, v) :: acc2 else acc2) acc) []
-  dbg_trace ("  all handle references in predicates: " ++ toString allHandleRefs)
+  dbg_trace s!"  all handle references in predicates: {allHandleRefs}"
   
   match hm.find? handle with 
   | none => 
     dbg_trace "No predicates found for handle"
     unreachable!
   | some rootPreds => 
-    dbg_trace ("phase2 starting at handle " ++ toString handle)
-    dbg_trace ("  root predicates: " ++ toString rootPreds)
+    dbg_trace s!"phase2 starting at handle {handle}"
+    dbg_trace s!"  root predicates: {rootPreds}"
     
-    dbg_trace ("  all available predicates: " ++ toString preds)
+    dbg_trace s!"  all available predicates: {preds}"
     
     let referencingPreds := preds.filter (fun p => p.rargs.any (fun (_, v) => v == handle))
-    dbg_trace ("  predicates referencing this handle: " ++ toString referencingPreds)
+    dbg_trace s!"  predicates referencing this handle: {referencingPreds}"
     
     let labeledPreds := preds.filter (fun p => p.label == handle)
-    dbg_trace ("  predicates with this handle as label: " ++ toString labeledPreds)
+    dbg_trace s!"  predicates with this handle as label: {labeledPreds}"
     
     let substitutions := preds.foldl (fun acc ep =>
       if ep.predicate == "temp_compound_name" then
@@ -140,7 +137,7 @@ def rewriteTempCompound (parent : Var) (handle : Var) (preds : List EP) (ev : El
         | (some x1, some x2) => (x2, x1) :: acc
         | _ => acc
       else acc) []
-    dbg_trace ("Collected substitutions: " ++ toString substitutions)
+    dbg_trace s!"Collected substitutions: {substitutions}"
 
     let emptyStats : Stats := default
     let (result, _) := processPredicates handle rootPreds [] hm emptyStats ev
@@ -149,13 +146,13 @@ def rewriteTempCompound (parent : Var) (handle : Var) (preds : List EP) (ev : El
       dbg_trace "processPredicates returned none"
       none
     | some formula =>
-      dbg_trace ("processPredicates returned formula: " ++ toString formula)
+      dbg_trace s!"processPredicates returned formula: {formula}"
       let substituted := substitutions.foldl (fun f (old, new) => f.substitute old new) formula
-      dbg_trace ("After substitutions: " ++ toString substituted)
+      dbg_trace s!"After substitutions: {substituted}"
       some substituted
       |>.map Formula.removeEmptyConj
 
--- Phase 3: Convert X2 to X1 in predicates
+-- Phase 3: Convert X2 to X1 in predicates  
 def substituteVariables (f : Formula) : Formula := 
   dbg_trace "Phase 3 - Converting X2 to X1"
   dbg_trace s!"Input formula: {f}"
@@ -177,22 +174,17 @@ def serializeFormula (f : Formula) : String :=
 
 def updateHandleMap (preds : List EP) : Multimap Var EP :=
   let initial := preds.foldl (fun hm ep => hm.insert ep.label ep) Multimap.empty
-  dbg_trace ("updateHandleMap: Full handle map " ++ 
-    (if preds.length == initial.keys.length then "before" else "after") ++
-    " phase1: " ++ toString (initial.keys.map (fun h => h.sort.toString ++ toString h.id)))
+  dbg_trace s!"updateHandleMap: Full handle map {if preds.length == initial.keys.length then "before" else "after"} phase1: {(initial.keys.map (fun h => h.sort.toString ++ toString h.id))}"
   initial
 
 def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :=
-  let msg := "Transform - Starting with handle " ++ toString handle ++
-             "\nPreds count: " ++ toString preds.length ++
-             "\nHandle map size: " ++ toString hm.keys.length ++
-             "\nHandle map contents: " ++ toString (hm.keys.map (fun k => (k, hm.find? k)))
+  let msg := s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
   dbg_trace msg
   
   let (p1preds, ev, newRoot) := processCompoundNames handle preds hm
   dbg_trace "After phase1, updating handle map with temp compounds"
   let newHm := updateHandleMap p1preds 
-  dbg_trace ("  new handle map size: " ++ toString newHm.keys.length)
+  dbg_trace s!"  new handle map size: {newHm.keys.length}"
   
   match rewriteTempCompound handle newRoot p1preds ev newHm with
   | none => "!!! NO FORMULA GENERATED !!!"

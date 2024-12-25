@@ -203,6 +203,13 @@ def getOrderedQuantArgs (args : List (String × Var)) : Option (Var × Var × Va
   | some (_, a), some (_, r), some (_, b) => some (a, r, b)
   | _, _, _ => none
 
+def getVarDeps (ep : EP) : List Var :=
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
+    |>.map (·.2)
+
+def getScopableArgs (ep : EP) : List (String × Var) :=
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
+
 end PWL.Transform
 
 export PWL.Transform (normalizedPredName joinSep joinComma reformQuotedPair getArg orderArgs getOrderedQuantArgs)
