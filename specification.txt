@@ -36,7 +36,7 @@ the_q(X, A(X), B)
 ```
 to
 ```
-?[S]:(S=^[s]:A(s) & size(S)=1 & S(x) & B) 
+?[S]:(S=^[s]:size(S)=1 & S(x) & A(s) & B) 
 ```
 6. Indefinite quantifiers serialize to standard existential quantification (?[var])
 
