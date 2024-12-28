@@ -166,8 +166,7 @@ mutual
             | (some part2, stats2) =>
               dbg_trace s!"  part1: {part1}"
               dbg_trace s!"  part2: {part2}"
-              (some (Formula.scope [evar] none (Formula.conj [part1, part2])), 
-               addStat stats2 4)
+              (some (Formula.scope [evar] (some ep.predicate) (Formula.conj [part1, part2])), addStat stats2 4)
         | _, _, _ => 
           dbg_trace "  missing required arguments"
           (none, stats)
