@@ -34,34 +34,46 @@
 
    a. the_q transforms from:
    ```
-   the_q(X, A(X), B)
+   the_q(X, A(X), B(X))
    ```
    to
    ```
-   ?[S]:(S=^[s]:size(S)=1 & S(x) & A(s) & B) 
+   ?[S]:(/* the_q */
+     S=^[s]:(
+       A(s)) &
+     size(S)=1 &
+     ?[X]:(
+       S(X) & B(X)))
    ```
 
-   b. Conjunctions of X-type variables transform from:
+   b. Conjunctions of x-type variables transform from:
    ```
-   and_c(x14, x19, x24)        [where x14=ARG0, x19=ARG1, x24=ARG2]
+   and_c(x14, x19, x24)        [where x14=ARG0, x19=ARG1, x24=ARG2, if x19 and x24 are not e-type variables]
    ```
    to
    ```
-   ?[S]:(/* and_c */
-     S=^[x14]:
-       (x14=x19 | x14=x24))
+   ?[x14]:(/* and_c */
+     x14=^[x]:(
+       x=x19 | x=x24))
    ```
 
-   c. Implicit conjunctions of X-type variables transform from:
+   c. Implicit conjunctions of x-type variables transform from:
    ```
-   implicit_conj(x3, x8, x14)   [where x3=ARG0, x8=ARG1, x14=ARG2]
+   implicit_conj(x3, x8, x14)   [where x3=ARG0, x8=ARG1, x14=ARG2, if x8 and x14 are not e-type variables]
    ```
    to
    ```
-   ?[S]:(/* implicit_conj */
-     S=^[x3]:
-       (x3=x8 | x3=x14))
+   ?[x3]:(/* implicit_conj */
+     x3=^[x]:(
+       x=x8 | x=x14))
    ```
+
+   d. Conjunctions of e-type variables
+   ```
+   and_c(e0,e1,e2) [where e0=ARG0, e1=ARG1, e2=ARG2, if e0 and e1 are not x-type variables]
+   ```
+   to
+   [nothing -- please delete these]
 
 6. Indefinite quantifiers serialize to standard existential quantification (?[var])
 
@@ -125,6 +137,11 @@ This example shows:
 
 ## Transformation Pipeline
 
+### Phase 0
+Should filter out any event-type and_c predicates:
+1. Remove predicates matching and_c(e0,e1,e2) [where e0=ARG0, e1=ARG1, e2=ARG2] when all arguments are e-type variables
+2. Pass through all other predicates unchanged
+
 ### Phase 1
 Should look for:
 1. proper_q(X1,..,A) 
@@ -155,8 +172,20 @@ Phase 3 converts X2 to X1, eliminating it from all predicates.
 ### Phase 4
 Phase 4 performs minimum scoping as described above.
 
-### Phase 5
-Phase 5 serializes as follows:
+### Phase 5 
+Phase 5 simplifies negation scopes:
+1. Identify Formula.scope nodes with "neg" or "never_a_1" quantifiers
+2. Check if the event variable in scope is actually used in the inner formula
+3. For unused event variables, remove the scope while preserving the negation operation 
+4. Process nested formulas recursively
+
+For example:
+ ~?[e1]:(/* neg */ inner)     ; when e1 is not used in inner transforms to:
+ ~?[]:(/* neg */ inner)       ; scope removed but negation preserved 
+ ~inner                       ; (not done by Phase 5, but by Phase 6 serialization)
+
+### Phase 6
+Phase 6 serializes to PWL format as follows:
 
 A named predicate like:
 ```
