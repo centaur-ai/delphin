@@ -54,11 +54,11 @@ def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent 
       let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
         let argNum := acc.2
         let str := if acc.1.isEmpty
-          then s!"(arg{argNum}({firstArg.2})={pair.2})"
-          else acc.1 ++ " & " ++ s!"(arg{argNum}({firstArg.2})={pair.2})"
+          then s!"arg{argNum}({firstArg.2})={pair.2}"
+          else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
         (str, argNum + 1)
       ) ("", 1)
-      s!"({normalized}({firstArg.2}) & {argStr.1})"  -- Only add parens when there are arg predicates
+      s!"({normalized}({firstArg.2}) & {argStr.1})"
   
   -- Only add outer parentheses if it's an atom with rest and not a quantifier
   let needsParens := isAtomWithRest && !pred.endsWith "_q"
