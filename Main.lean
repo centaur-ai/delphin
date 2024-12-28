@@ -70,7 +70,7 @@ def main : IO Unit := do
                                                acc ++ strList) []
 
  -- Just combine all the sentence content
- let sentenceContent := sentences.foldl (fun acc pair => acc ++ pair.snd.fst ++ "\n/* --- */\n") ""
+ let sentenceContent := sentences.foldl (fun acc pair => acc ++ pair.snd.fst ++ "\n;\n") ""
  let finalContent := sentenceContent
  
  IO.FS.writeFile "pwl-outputs/sentences.pwl" finalContent
