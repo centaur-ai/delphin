@@ -12,43 +12,19 @@
             (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x29)))))))
 ;
 ?[x8]:(/* proper_q */
-  ?[e53,e54]:(
-    (therein_p_dir(e54) & arg1(e54)=e53) &
-    (name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
-    ?[x3]:(/* udef_q */
-      ?[e30]:(
-        (live_v_1(e30) & arg1(e30)=x3) &
-        ?[S]:(/* the_q */
-          S=^[s]:(
-            (live_v_1(e53) & arg1(e53)=x46) &
-            ?[i52]:(
-              (people_n_of(x46) & arg1(x46)=i52) &
-              ?[e51]:(
-                (only_a_1(e51) & arg1(e51)=x46) &
-                ?[S]:(/* the_q */
-                  S=^[s]:(
-                    butler_n_1(x19) &
-                    ?[x24]:(/* proper_q */
-                      (name(n) & arg1(n)=x24 & arg2(n)="Charles") &
-                      ?[x14]:(/* udef_q */
-                        ?[x38]:(/* proper_q */
-                          (name(n) & arg1(n)=x38 & arg2(n)="Dreadbury Mansion") &
-                          ?[e31]:(
-                            (in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x38) &
-                            ?[x14]:(/* and_c */
-                              x14=^[x]:(
-                                x=x19 | x=x24)) &
-                            ?[x3]:(/* implicit_conj */
-                              x3=^[x]:(
-                                x=x8 | x=x14)) &
-                            ?[e45]:(
-                              (be_v_id(e45) & arg1(e45)=x3 & arg2(e45)=x46))))))) &
-                  size(S)=1 &
-                  ?[x19]:(
-                    S(x19)))))) &
-          size(S)=1 &
-          ?[x46]:(
-            S(x46)))))))
+  (name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
+  ?[x3]:(/* udef_q */
+    ?[e30]:(
+      (live_v_1(e30) & arg1(e30)=x3) &
+      ?[S]:(/* the_q */
+        S=^[s]:(
+          (only_a_1(e51) & arg1(e51)=x46) &
+          (people_n_of(x46) & arg1(x46)=i52) &
+          (live_v_1(e53) & arg1(e53)=x46) &
+          (therein_p_dir(e54) & arg1(e54)=e53)) &
+        size(S)=1 &
+        ?[x46]:(
+          S(x46)))))
 ;
 ?[x28]:(/* def_explicit_q */
   ?[i39]:(
@@ -94,20 +70,23 @@
   (name(n) & arg1(n)=x3 & arg2(n)="Agatha") &
   ?[S]:(/* the_q */
     S=^[s]:(
-      butler_n_1(x15) &
+      butler_n_1(x15)) &
+    size(S)=1 &
+    ?[x15]:(
+      S(x15) &
       ![x9]:(/* every_q */
         person(x9) &
         ?[e14]:(
           (except_p(e14) & arg1(e14)=x9 & arg2(e14)=x15) &
           ?[e2]:(
-            (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9))))) &
-    size(S)=1 &
-    ?[x15]:(
-      S(x15))))
+            (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9))))))
 ;
 ?[S]:(/* the_q */
   S=^[s]:(
-    butler_n_1(x3) &
+    butler_n_1(x3)) &
+  size(S)=1 &
+  ?[x3]:(
+    S(x3) &
     ?[x25]:(/* proper_q */
       (name(n) & arg1(n)=x25 & arg2(n)="Aunt Agatha") &
       ?[e16,e18]:(
@@ -117,14 +96,14 @@
             (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17) &
             person(x8) &
             ?[e2]:(
-              (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))))) &
-  size(S)=1 &
-  ?[x3]:(
-    S(x3)))
+              (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)))))))
 ;
 ?[S]:(/* the_q */
   S=^[s]:(
-    butler_n_1(x3) &
+    butler_n_1(x3)) &
+  size(S)=1 &
+  ?[x3]:(
+    S(x3) &
     ?[x14]:(/* proper_q */
       (name(n) & arg1(n)=x14 & arg2(n)="Agatha") &
       ?[x19]:(/* udef_q */
@@ -137,10 +116,7 @@
               ?[e26]:(
                 (hate_v_1(e26) & arg1(e26)=x14 & arg2(e26)=x8) &
                 ?[e2]:(
-                  (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))))))) &
-  size(S)=1 &
-  ?[x3]:(
-    S(x3)))
+                  (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)))))))))
 ;
 ?[x3]:(/* no_q */
   person(x3) &
@@ -153,12 +129,12 @@
   (name(n) & arg1(n)=x3 & arg2(n)="Agatha") &
   ?[S]:(/* the_q */
     S=^[s]:(
-      butler_n_1(x10) &
-      ~?[e2]:(
-        (be_v_id(e2) & arg1(e2)=x3 & arg2(e2)=x10))) &
+      butler_n_1(x10)) &
     size(S)=1 &
     ?[x10]:(
-      S(x10))))
+      S(x10) &
+      ~?[e2]:(
+        (be_v_id(e2) & arg1(e2)=x3 & arg2(e2)=x10))))
 ;
 ?[x20]:(/* pronoun_q */
   ?[i7]:(
