@@ -118,24 +118,23 @@ def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars)
     dbg_trace "No predicates found for handle"
     unreachable!
   | some rootPreds => 
-    let substitutions := preds.foldl (fun acc ep =>
+    let emptyStats : Stats := default
+    let (result, _) := processPredicates handle rootPreds [] hm emptyStats ev
+    match result with
+    | none => none 
+    | some formula => some formula
+
+def phase3 (preds : List EP) (f : Formula) : Formula := 
+  dbg_trace "Phase 3 - Converting X2 to X1"
+  -- Apply X2->X1 substitutions from temp_compound_name rules
+  let substitutions := preds.foldl (fun acc ep =>
       if ep.predicate == "temp_compound_name" then
         match (getArg ep "X1", getArg ep "X2") with
         | (some x1, some x2) => (x2, x1) :: acc
         | _ => acc
       else acc) []
-    let emptyStats : Stats := default
-    let (result, _) := processPredicates handle rootPreds [] hm emptyStats ev
-    match result with
-    | none => none 
-    | some formula =>
-      let substituted := substitutions.foldl (fun f (old, new) => f.substitute old new) formula
-      some substituted
-      |>.map Formula.removeEmptyConj
-
-def phase3 (f : Formula) : Formula := 
-  dbg_trace "Phase 3 - Converting X2 to X1"
-  f
+  let result := substitutions.foldl (fun f (old, new) => f.substitute old new) f
+  Formula.removeEmptyConj result
 
 def phase4 (f : Formula) : Formula :=
   dbg_trace "Phase 4 - Minimum scoping"
@@ -159,7 +158,7 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
   match phase2 handle newRoot p1preds ev newHm with
   | none => "!!! NO FORMULA GENERATED !!!"
   | some formula =>
-      let substituted := phase3 formula
+      let substituted := phase3 p1preds formula
       let minScoped := phase4 substituted
       let negSimplified := phase5 minScoped
       phase6 negSimplified
