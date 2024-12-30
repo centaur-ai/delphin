@@ -1,5 +1,6 @@
 import Mrs.Basic
 import Mrs.PwlTypes 
+import Mrs.PwlTransformScopingCore
 import Mrs.PwlTransformScoping
 import Mrs.PwlTransformShared 
 import Mrs.PwlTransformMinScoping
@@ -15,7 +16,9 @@ open MM (Multimap)
 open Lean (Format HashMap)
 open InsertionSort
 open HOF (lastTwoChars)
-open PWL.Transform.Scoping (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle processPredicates)
+open PWL.Transform.ScopingCore (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle)
+open PWL.Transform.Scoping (processPredicates)
+open PWL.Transform.MinScoping (ScopedEP analyzeFormula)
 
 def updateHandleMap (preds : List EP) : Multimap Var EP :=
   let initial := preds.foldl (fun hm ep => hm.insert ep.label ep) Multimap.empty
@@ -150,14 +153,14 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
 
   let filteredPreds := phase0 preds
   let (p1preds, ev, newRoot) := phase1 handle filteredPreds hm
-  dbg_trace "After phase1, updating handle map with temp compounds"
+  dbg_trace "After phase1, updating handle map with temp compounds" 
   let newHm := updateHandleMap p1preds
 
   match phase2 handle newRoot p1preds ev newHm with
   | none => "!!! NO FORMULA GENERATED !!!"
   | some formula =>
       let substituted := phase3 formula
-      let minScoped := phase4 substituted 
+      let minScoped := phase4 substituted
       let negSimplified := phase5 minScoped
       phase6 negSimplified
 

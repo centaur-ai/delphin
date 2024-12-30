@@ -23,8 +23,7 @@ partial def debugNested (f : Formula) : String :=
   | Formula.conj fs => s!"conj(len={fs.length})"
 
 partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) : String :=
-  let indentStr := makeIndent ind
-  let effectiveIndentStr := if skipInitialIndent then "" else indentStr
+  let indentStr := if skipInitialIndent then "" else makeIndent ind
 
   match f with 
   | Formula.atom ep =>
@@ -41,21 +40,26 @@ partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : 
     else
       formatPredArgs ep.predicate ep.rargs ep.carg ind false
 
+  | Formula.scope vars (some "rstr_guard") inner =>
+    -- Pass through to the Q handler without any additional wrapping
+    -- since rstr_guard is just for protecting content during minscoping
+    formatAsPWL inner bv ind inP skipInitialIndent
+
   | Formula.scope vars (some q) inner => 
     let normalizedQuant := normalizePredicate q
     dbg_trace s!"Serializing scope with quantifier: {q} (normalized: {normalizedQuant})"
     if (normalizedQuant == "neg" || normalizedQuant == "never_a_1") && vars.isEmpty then
-      s!"{effectiveIndentStr}~{formatAsPWL inner bv ind false true}"
+      s!"{indentStr}~{formatAsPWL inner bv ind false true}"
     else
       match normalizedQuant with
-      | "the_q" => (formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip))
+      | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip)
       | "every_q" =>
-        s!"{effectiveIndentStr}![{varList_toString vars}]:(/* every_q */\n{formatAsPWL inner bv (ind + 2) false false})"
+        s!"{indentStr}![{varList_toString vars}]:(/* every_q */\n{formatAsPWL inner bv (ind + 2) false false})"
       | _ =>
-        s!"{effectiveIndentStr}?[{varList_toString vars}]:(/* {normalizedQuant} */\n{formatAsPWL inner bv (ind + 2) false false})"
+        s!"{indentStr}?[{varList_toString vars}]:(/* {normalizedQuant} */\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.scope vars none inner =>
-    s!"{effectiveIndentStr}?[{varList_toString vars}]:(\n{formatAsPWL inner bv (ind + 2) false false})"
+    s!"{indentStr}?[{varList_toString vars}]:(\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.conj [] => ""
 
