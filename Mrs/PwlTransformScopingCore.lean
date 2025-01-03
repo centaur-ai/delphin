@@ -64,6 +64,23 @@ def isSimpleNamed (f : Formula) : Bool :=
   | Formula.atom ep => ep.predicate == "named" || ep.predicate == "_named"
   | _ => false
 
+def isGuardedVar (v : Var) : Bool :=
+  v.sort == 'r' || v.sort == 'b'
+
+def makeGuardVar (sort : Char) (id : Nat) : Var :=
+  {id := id, sort := sort, props := #[]}
+
+def makeRstrGuardVar (id : Nat) : Var := makeGuardVar 'r' id
+def makeBodyGuardVar (id : Nat) : Var := makeGuardVar 'b' id
+
+def isRstrVar (v : Var) : Bool := v.sort == 'r'
+def isBodyVar (v : Var) : Bool := v.sort == 'b'
+
+def getGuardType (v : Var) : Option Char :=
+  if isRstrVar v then some 'r'
+  else if isBodyVar v then some 'b'
+  else none
+
 end PWL.Transform.ScopingCore
 
 export PWL.Transform.ScopingCore (
@@ -73,4 +90,11 @@ export PWL.Transform.ScopingCore (
   shouldEliminateHandle 
   isSimpleNamed
   orderPredicateArgs
+  isGuardedVar
+  makeGuardVar
+  makeRstrGuardVar
+  makeBodyGuardVar
+  isRstrVar
+  isBodyVar
+  getGuardType
 )

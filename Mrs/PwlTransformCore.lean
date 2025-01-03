@@ -15,10 +15,46 @@ open MRS (Var EP Constraint MRS)
 open MM (Multimap)
 open Lean (Format HashMap)
 open InsertionSort
-open HOF (lastTwoChars)
 open PWL.Transform.ScopingCore (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle)
 open PWL.Transform.Scoping (processPredicates)
 open PWL.Transform.MinScoping (ScopedEP analyzeFormula)
+
+instance : Ord (EP × Nat) where
+  compare := fun p1 p2 => 
+    match compare p1.2 p2.2 with
+    | .eq => .eq
+    | ord => ord
+
+structure CompoundInfo where
+  var1 : Var
+  var2 : Var
+  string1 : String
+  string2 : String
+  deriving Inhabited
+
+def makeCompoundInfo (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option CompoundInfo :=
+  match pat.named1.predicate.carg, pat.named2.predicate.carg with 
+  | some s1, some s2 =>
+    match pat.properQ1.predicate.rargs.find? (fun arg => arg.1 == "ARG0"),
+          pat.properQ2.predicate.rargs.find? (fun arg => arg.1 == "ARG0") with
+    | some (_, var1), some (_, var2) =>
+      some ⟨var1, var2, s1, s2⟩
+    | _, _ => none
+  | _, _ => none
+
+def getReferencedHandles (compoundInfos : List CompoundInfo) : List Var :=
+  compoundInfos.foldl (fun acc info => [info.var1, info.var2] ++ acc) []
+
+def isCompoundInvolving (parent : Var) (pat : CompoundMatch) : Bool :=
+  let isParentLabel := pat.properQ1.predicate.label == parent || pat.properQ2.predicate.label == parent
+  let isParentBody := 
+    (match pat.properQ1.predicate.rargs.find? (fun arg => arg.1 == "BODY") with
+    | some (_, body) => body == parent
+    | none => false) ||
+    (match pat.properQ2.predicate.rargs.find? (fun arg => arg.1 == "BODY") with
+    | some (_, body) => body == parent
+    | none => false)
+  isParentLabel || isParentBody
 
 def updateHandleMap (preds : List EP) : Multimap Var EP :=
   let initial := preds.foldl (fun hm ep => hm.insert ep.label ep) Multimap.empty
@@ -33,135 +69,147 @@ def phase0 (preds : List EP) : List EP :=
       false
   preds.filter (fun ep => !removeEventAnd ep)
 
-def isCompoundInvolving (parent : Var) (pat : CompoundMatch) : Bool :=
-  dbg_trace s!"Checking if compound involves parent {parent}"
-  dbg_trace s!"  properQ1: {pat.properQ1}"
-  dbg_trace s!"  properQ2: {pat.properQ2}"
-  let isParentLabel := pat.properQ1.label == parent || pat.properQ2.label == parent
-  let isParentBody := 
-    (match pat.properQ1.rargs.find? (fun arg => arg.1 == "BODY") with
-    | some (_, body) => body == parent
-    | none => false) ||
-    (match pat.properQ2.rargs.find? (fun arg => arg.1 == "BODY") with
-    | some (_, body) => body == parent
-    | none => false)
-  dbg_trace s!"  isParentLabel: {isParentLabel}, isParentBody: {isParentBody}"
-  isParentLabel || isParentBody
+partial def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) (dm : DepthMap) 
+    : (List EP × List CompoundInfo × EliminatedVars × Var) :=
+  let rec processCompounds (curPreds : List EP) (processedCompounds : List EP) 
+      (compoundInfos : List CompoundInfo) (curRoot : Var) 
+      : (List EP × List CompoundInfo × Var) := 
+    -- Find unprocessed compounds
+    let compounds := curPreds.filter fun p =>
+      (p.predicate == "compound" || p.predicate == "_compound") &&
+      !processedCompounds.any (fun c => c.label == p.label)
+    
+    dbg_trace s!"PHASE1 processing compounds iteration:"
+    dbg_trace s!"  Current root: {curRoot}"
+    dbg_trace s!"  Remaining unprocessed compounds: {compounds.map (fun p => s!"\n    ({p.predicate}, {p.label})")}"
 
-def getReferencedHandles (temps : List EP) : List Var :=
-  let handles := temps.foldl (fun acc ep => 
-    match ep.rargs with
-    | ("X1", _) :: ("X2", _) :: ("A", a) :: ("B", b) :: _ => a :: b :: acc
-    | _ => acc) []
-  dbg_trace s!"Referenced handles from temps: {handles}"
-  handles
+    if compounds.isEmpty then
+      dbg_trace "PHASE1 no more compounds found"
+      (curPreds, compoundInfos, curRoot)
+    else
+      -- Get compound depths and sort
+      let compoundDepths := compounds.map fun c =>
+        let depth := match dm.depths.find? c.label with
+                    | some d => d
+                    | none => MAX_DEPTH
+        (c, depth)
+      
+      let firstCompound := (insertionSort compoundDepths).head!.1
+      dbg_trace s!"PHASE1 processing deepest compound: ({firstCompound.predicate}, {firstCompound.label})"
 
-def makeTemp (parent : Var) (ev : EliminatedVars) (pat : CompoundMatch) : Option EP :=
-  dbg_trace s!"Making temp_compound_name with: pat.properQ1={pat.properQ1} pat.properQ2={pat.properQ2} pat.named1={pat.named1} pat.named2={pat.named2}"
-  match pat.named1.carg, pat.named2.carg with 
-  | some s1, some s2 =>
-    let x1 := pat.properQ1.rargs.find? (fun arg => arg.1 == "ARG0")
-    let x2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "ARG0")
-    let b1 := pat.properQ1.rargs.find? (fun arg => arg.1 == "BODY")
-    let b2 := pat.properQ2.rargs.find? (fun arg => arg.1 == "BODY")
-    match x1, x2, b1, b2 with
-    | some (_, var1), some (_, var2), some (_, body1), some (_, body2) =>
-      let label := if pat.properQ1.label == parent || pat.properQ2.label == parent 
-                   then parent 
-                   else pat.properQ2.label
-      dbg_trace s!"Creating temp_compound_name with label: {label}"
-      some (EP.mk "temp_compound_name" none label
-        [("X1", var1), ("X2", var2), ("A", body1), ("B", body2)]
-        (some ("\"" ++ removeExtraQuotes s1 ++ " " ++ removeExtraQuotes s2 ++ "\"")))
-    | _, _, _, _ => none
-  | _, _ => none
+      match getCompoundPattern curPreds firstCompound hm dm with
+      | none => 
+        dbg_trace s!"PHASE1 pattern match failed for {firstCompound.label}, marking as processed"
+        processCompounds curPreds (firstCompound :: processedCompounds) compoundInfos curRoot
+      | some pat =>
+        dbg_trace s!"PHASE1 pattern matched for {firstCompound.label}"
+        dbg_trace s!"PHASE1 pattern details:"
+        dbg_trace s!"  Compound: {pat.compound.predicate} ({pat.compound.label})"
+        dbg_trace s!"  ProperQ1: {pat.properQ1.predicate.predicate} ({pat.properQ1.predicate.label})"
+        dbg_trace s!"  ProperQ2: {pat.properQ2.predicate.predicate} ({pat.properQ2.predicate.label})"
+        dbg_trace s!"  Named1: {pat.named1.predicate.predicate} ({pat.named1.predicate.label})"
+        dbg_trace s!"  Named2: {pat.named2.predicate.predicate} ({pat.named2.predicate.label})"
+        
+        match makeCompoundInfo parent EliminatedVars.empty pat with 
+        | none => 
+          dbg_trace "PHASE1 info creation failed"
+          processCompounds curPreds (firstCompound :: processedCompounds) compoundInfos curRoot
+        | some info =>
+          dbg_trace s!"PHASE1 created compound info for {firstCompound.label}"
+          dbg_trace s!"  Var1: {info.var1}"
+          dbg_trace s!"  Var2: {info.var2}"
+          dbg_trace s!"  String1: {info.string1}"
+          dbg_trace s!"  String2: {info.string2}"
 
-def shouldRemoveWithRefs (p : EP) (pat : CompoundMatch) (referencedHandles : List Var) : Bool :=
-  if referencedHandles.contains p.label then
-    dbg_trace s!"Keeping {p.label} due to reference"
-    false
-  else
-    let remove := shouldRemove p pat
-    dbg_trace s!"Removing {p.label}: {remove}"
-    remove
+          -- Update predicates
+          let newPreds := curPreds.map fun p =>
+            if p == pat.named2.predicate then
+              -- Replace second named predicate with equality
+              EP.mk "=" none pat.compound.label [("ARG1", info.var2), ("ARG2", info.var1)] none
+            else if p == pat.named1.predicate then
+              -- Update first named predicate with concatenated string
+              {p with carg := some ("\"" ++ removeExtraQuotes info.string1 ++ " " ++ 
+                                         removeExtraQuotes info.string2 ++ "\"")}
+            else p
 
-def phase1 (parent : Var) (preds : List EP) (hm : Multimap Var EP) : (List EP × EliminatedVars × Var) :=
-  dbg_trace s!"Phase 1 - Processing compound names with parent handle: {parent}"
-  let compounds := preds.filter fun p => 
-    p.predicate == "compound" || p.predicate == "_compound"
-  let patterns := compounds.filterMap (fun c => getCompoundPattern preds c hm)
-  let temps := patterns.filterMap (makeTemp parent EliminatedVars.empty)
-  let referencedHandles := getReferencedHandles temps
-  let labelsToRemove := patterns.foldl (fun acc pat =>
-    [pat.compound.label, pat.properQ1.label, pat.properQ2.label, 
-     pat.named1.label, pat.named2.label] ++ acc) []
-  let rootInvolvedPatterns := patterns.filter (isCompoundInvolving parent)
-  let eliminatedVars := collectEliminatedVars $
-    patterns.filter (fun p => temps.any (fun t => t.predicate == "temp_compound_name"))
-    |>.map (fun p => p.compound)
-  let remaining := preds.filter fun pred =>
-    !labelsToRemove.contains pred.label &&
-    !(referencedHandles.contains pred.label && 
-      (pred.predicate == "named" || pred.predicate == "_named"))
-  let newRoot := 
-    if rootInvolvedPatterns.isEmpty then parent
-    else match temps.find? (fun t => t.label == parent) with
-         | some temp => temp.label
-         | none => parent
-  (remaining ++ temps, eliminatedVars, newRoot)
+          -- Remove only this specific compound
+          let filteredPreds := newPreds.filter fun p => !(p == pat.compound)
+          
+          let newRoot := if curRoot == pat.compound.label then pat.properQ1.predicate.label else curRoot
+          dbg_trace s!"PHASE1 root update: {curRoot} -> {newRoot}"
+          dbg_trace s!"PHASE1 updated predicates:"
+          dbg_trace s!"  {filteredPreds.map (fun p => s!"\n    {p.predicate} ({p.label})")}"
+          
+          processCompounds filteredPreds 
+            (firstCompound :: processedCompounds)
+            (info :: compoundInfos)
+            newRoot
+
+  let (finalPreds, compoundInfos, finalRoot) := processCompounds preds [] [] parent
+  let eliminatedVars := collectEliminatedVars finalPreds
+  
+  dbg_trace s!"PHASE1 complete:"
+  dbg_trace s!"  Final root: {finalRoot}"
+  dbg_trace s!"  All compound infos collected: {compoundInfos.map (fun info => 
+    s!"\n    Var1: {info.var1}, Var2: {info.var2}, String1: {info.string1}, String2: {info.string2}")}"
+  dbg_trace s!"  Final predicates: {finalPreds.map (fun p => s!"\n    ({p.predicate}, {p.label})")}"
+  
+  (finalPreds, compoundInfos, eliminatedVars, finalRoot)
 
 def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars) (hm : Multimap Var EP) : Option Formula :=
-  dbg_trace s!"Phase 2 - Rewriting temp compounds for handle: {handle}"
-  dbg_trace s!"  parent handle was: {parent}"
+  dbg_trace s!"PHASE2: Initial state: parent={parent} handle={handle}\nAll predicates:\n{preds.map (fun p => 
+    (p.predicate, p.label, p.rargs.map (fun a => (a.1, a.2)), p.carg))}"
+
   match hm.find? handle with 
   | none => 
-    dbg_trace "No predicates found for handle"
-    unreachable!
+    dbg_trace s!"PHASE2: No predicates found for handle {handle}"
+    none
   | some rootPreds => 
-    let emptyStats : Stats := default
-    let (result, _) := processPredicates handle rootPreds [] hm emptyStats ev
-    match result with
-    | none => none 
-    | some formula => some formula
+    dbg_trace s!"PHASE2: Root predicates for {handle}:\n{rootPreds.map (fun p => 
+      (p.predicate, p.label, p.rargs.map (fun a => (a.1, a.2)), p.carg))}"
+    dbg_trace s!"PHASE2: Processing with:\n  Parent={parent}\n  Handle={handle}\n  EliminatedVars={ev.vars}"
+    
+    match processPredicates handle rootPreds [] hm default ev with
+    | (some formula, _) => 
+      dbg_trace s!"PHASE2: Generated formula: {formula}"
+      some formula
+    | (none, _) => 
+      dbg_trace s!"PHASE2: Failed to generate formula"
+      none
 
-def phase3 (preds : List EP) (f : Formula) : Formula := 
-  dbg_trace "Phase 3 - Converting X2 to X1"
-  -- Apply X2->X1 substitutions from temp_compound_name rules
-  let substitutions := preds.foldl (fun acc ep =>
-      if ep.predicate == "temp_compound_name" then
-        match (getArg ep "X1", getArg ep "X2") with
-        | (some x1, some x2) => (x2, x1) :: acc
-        | _ => acc
-      else acc) []
-  let result := substitutions.foldl (fun f (old, new) => f.substitute old new) f
-  Formula.removeEmptyConj result
+def phase3 := PWL.Transform.NegationScopeRemoval.simplifyNegation
 
-def phase4 (f : Formula) : Formula :=
-  dbg_trace "Phase 4 - Minimum scoping"
-  minimizeScoping f
-
-def phase5 := PWL.Transform.NegationScopeRemoval.simplifyNegation
-
-def phase6 (f : Formula) : String :=
-  dbg_trace "Phase 6 - Serializing to PWL format"
+def phase4 (f : Formula) : String :=
+  dbg_trace "Phase 4 - Serializing to PWL format"
   formatAsPWL f none
 
 def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :=
-  let msg := s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
-  dbg_trace msg
+  dbg_trace s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
 
   let filteredPreds := phase0 preds
-  let (p1preds, ev, newRoot) := phase1 handle filteredPreds hm
-  dbg_trace "After phase1, updating handle map with temp compounds" 
+  dbg_trace s!"POST_PHASE0: After phase0 filtered predicates: {filteredPreds.map (fun p => (p.predicate, p.label))}"
+  
+  let dm := computeDepthMap handle hm
+  let (p1preds, compoundInfos, ev, newRoot) := phase1 handle filteredPreds hm dm
+  dbg_trace s!"POST_PHASE1: Preds from phase1: {p1preds.map (fun p => (p.predicate, p.label))}"
+  dbg_trace s!"POST_PHASE1: New root={newRoot} eliminatedVars={ev.vars}"
+  dbg_trace s!"POST_PHASE1: Compound infos: {compoundInfos.map (fun info => (info.var1, info.var2))}"
+  
+  dbg_trace "POST_PHASE1: Updating handle map with phase1 results" 
   let newHm := updateHandleMap p1preds
+  dbg_trace s!"POST_PHASE1: Updated handle map keys: {newHm.keys}"
 
   match phase2 handle newRoot p1preds ev newHm with
-  | none => "!!! NO FORMULA GENERATED !!!"
+  | none => 
+    dbg_trace "POST_PHASE2: No formula generated"
+    "!!! NO FORMULA GENERATED !!!"
   | some formula =>
-      let substituted := phase3 p1preds formula
-      let minScoped := phase4 substituted
-      let negSimplified := phase5 minScoped
-      phase6 negSimplified
+      dbg_trace s!"POST_PHASE2: Generated formula: {formula}"
+      let negSimplified := phase3 formula
+      dbg_trace s!"POST_PHASE3: Negation simplified: {negSimplified}"
+      let result := phase4 negSimplified
+      dbg_trace s!"Final result: {result}"
+      result
 
 end PWL.Transform
 

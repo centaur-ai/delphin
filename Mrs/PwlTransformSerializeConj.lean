@@ -1,7 +1,6 @@
 import Mrs.Basic
 import Mrs.PwlTypes
 import Mrs.PwlTransformShared
-import Mrs.PwlTransformSerializeBase
 import Mrs.Hof
 
 namespace PWL.Transform.Serialize

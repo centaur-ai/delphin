@@ -3,196 +3,196 @@ import Mrs.PwlTypes
 import Mrs.PwlTransformShared
 import Mrs.PwlTransformMinScoping_Core
 import Mrs.PwlTransformMinScoping_Analysis
-import Mrs.PwlTransformMinScoping_Events
+import Mrs.PwlTransformMinScoping_Events 
+import Mrs.PwlTransformMinScoping_Scopes
 import Mrs.PwlTransformSerializeTheQ
 import Util.InsertionSort
 
 namespace PWL.Transform.MinScoping
 
-open MRS (EP Var)
+open MRS (Var EP)
 open InsertionSort
 open PWL.Transform
 open Lean (HashMap)
 
 def buildScopedFormula (scope : ScopeInfo) (inner : Formula) : Formula :=
-  dbg_trace s!"MINSCOPE:buildScopedFormula for {scope.predicate} type={toString scope.scopeType}"
+  dbg_trace s!"MINSCOPE.buildScopedFormula: scope={scope.predicate} vars={scope.boundVars}"
   match scope.scopeType with
-  | ScopeType.RstrGuard => 
-    dbg_trace "MINSCOPE:  Creating RSTR guard scope without variables"
-    let result := Formula.scope [] (some "rstr_guard") inner
-    dbg_trace s!"MINSCOPE:  RSTR guard formula created:\n{result}"
-    result
-  | _ =>
-    dbg_trace s!"MINSCOPE:  Creating regular scope with vars={scope.boundVars}"
-    let result := Formula.scope scope.boundVars (some scope.predicate) inner
-    dbg_trace s!"MINSCOPE:  Regular scope formula created:\n{result}"
-    result
+  | ScopeType.RstrGuard => Formula.scope [] (some "rstr_guard") inner
+  | _ => Formula.scope scope.boundVars (some scope.predicate) inner
 
-def buildEventGroupFormula (group : List EP) (inner : Formula) (scopedEvents : List Var) : Formula :=
-  dbg_trace s!"MINSCOPE:buildEventGroupFormula starting with {group.length} predicates:\n{group.map (·.predicate)}"
-  dbg_trace s!"MINSCOPE:  Already scoped events: {scopedEvents}"
+partial def getVarDependencies (preds : List ScopedEP) (v : Var) : List Var :=
+  -- Get direct dependencies - where var appears with other x vars in same pred
+  let directDeps := preds.foldl (fun acc p =>
+    if p.predicate.rargs.any (fun a => a.2 == v) then
+      let deps := p.predicate.rargs.foldl (fun acc2 a =>
+        if a.2.sort == 'x' && a.2 != v then
+          a.2 :: acc2
+        else acc2) []
+      dbg_trace s!"MINSCOPE.deps: var {v} direct deps from {p.predicate.predicate}: {deps}"
+      acc ++ deps
+    else acc) []
   
-  let eventVars := group.foldl (fun acc ep => 
-    let newVars := getEventVars ep |>.filter (fun v => !scopedEvents.contains v)
-    dbg_trace s!"MINSCOPE:  Getting events from {ep.predicate}: new={newVars}"
-    (acc ++ newVars).eraseDups) []
-    
-  match eventVars with
-  | [] => 
-    dbg_trace "MINSCOPE:  No new events - returning plain conjunction"
-    let result := Formula.conj (group.map Formula.atom ++ [inner])
-    dbg_trace s!"MINSCOPE:  Plain conjunction result:\n{result}"
-    result
-  | _ => 
-    dbg_trace s!"MINSCOPE:  Creating event scope with vars: {eventVars}"
-    let result := Formula.scope eventVars none 
-      (Formula.conj (group.map Formula.atom ++ [inner]))
-    dbg_trace s!"MINSCOPE:  Event scope result:\n{result}"
-    result
+  -- Get event-mediated dependencies - where vars connect through event vars
+  let eventDeps := preds.foldl (fun acc p =>
+    if p.predicate.rargs.any (fun a => a.2 == v) then
+      let eventVars := p.predicate.rargs.filter (fun a => a.2.sort == 'e') |>.map (·.2)
+      dbg_trace s!"MINSCOPE.deps: var {v} in {p.predicate.predicate} has events {eventVars}"
+      let connectedPreds := preds.filter (fun p2 => 
+        eventVars.any (fun ev => p2.predicate.rargs.any (fun a => a.2 == ev)))
+      let connectedVars := connectedPreds.foldl (fun acc2 p2 =>
+        let newVars := p2.predicate.rargs.filter (fun a => a.2.sort == 'x' && a.2 != v) |>.map (·.2)
+        dbg_trace s!"MINSCOPE.deps: connected pred {p2.predicate.predicate} adds vars {newVars}"
+        acc2 ++ newVars) []
+      acc ++ connectedVars
+    else acc) []
 
-def buildEventConj (groups : List (List EP)) (inner : Formula) (scopedEvents : List Var := []) : Formula :=
-  dbg_trace s!"MINSCOPE:buildEventConj processing {groups.length} groups:"
-  dbg_trace s!"MINSCOPE:  Groups: {groups.map (fun g => g.map (·.predicate))}"
-  dbg_trace s!"MINSCOPE:  Already scoped events: {scopedEvents}"
-  match groups with
-  | [] => 
-    dbg_trace "MINSCOPE:  No groups - returning inner formula"
-    inner
-  | g :: gs => 
-    dbg_trace s!"MINSCOPE:  Processing group {g.map (·.predicate)}"
-    let result := buildEventConj gs inner scopedEvents
-    -- Get all events from this group
-    let groupEvents := g.foldl (fun acc ep =>
-      (acc ++ getEventVars ep).eraseDups) []
-    -- Only scope events not already scoped
-    let newEvents := groupEvents.filter (fun v => !scopedEvents.contains v)
-    if newEvents.isEmpty then
-      dbg_trace "MINSCOPE:  No new events to scope - returning conjunction"
-      Formula.conj (g.map Formula.atom ++ [result])
-    else  
-      dbg_trace s!"MINSCOPE:  Creating scope for new events: {newEvents}"
-      Formula.scope newEvents none
-        (Formula.conj (g.map Formula.atom ++ [result]))
+  let allDeps := (directDeps ++ eventDeps).eraseDups
+  dbg_trace s!"MINSCOPE.deps: var {v} total deps: {allDeps}"
+  allDeps
 
-partial def buildFormula (scopes : List ScopeInfo) (preds : List ScopedEP) (scopedEvents : List Var) : Formula :=
-  let makeIndent (n : Nat) := String.mk (List.replicate n ' ')
+partial def buildDependencyGraph (scopes : List ScopeInfo) (preds : List ScopedEP) 
+    : List (ScopeInfo × List ScopeInfo) :=
+  dbg_trace s!"MINSCOPE.graph: building for {scopes.length} scopes"
+  scopes.map (fun s => 
+    match s.boundVars.head? with
+    | none => (s, [])
+    | some v => 
+      let depVars := getVarDependencies preds v
+      let depScopes := scopes.filter (fun s2 => 
+        s2 != s && s2.boundVars.any (fun v2 => depVars.contains v2))
+      dbg_trace s!"MINSCOPE.graph: scope {s.predicate} for {v} depends on: {depScopes.map (fun s => s.boundVars)}"
+      (s, depScopes))
 
-  let rec dumpFormula : Formula → Nat → String
-    | Formula.atom ep, indent => "\n" ++ (makeIndent indent) ++ s!"Atom: {ep.predicate}"
-    | Formula.scope vars (some name) inner, indent => 
-      "\n" ++ (makeIndent indent) ++ s!"Scope [{name}] vars={vars}:" ++ 
-      dumpFormula inner (indent + 2)
-    | Formula.scope vars none inner, indent => 
-      "\n" ++ (makeIndent indent) ++ s!"Scope [unnamed] vars={vars}:" ++ 
-      dumpFormula inner (indent + 2)
-    | Formula.conj fs, indent =>
-      "\n" ++ (makeIndent indent) ++ "Conj:" ++
-      (fs.foldl (fun acc f => acc ++ dumpFormula f (indent + 2)) "")
+def findRoots (graph : List (ScopeInfo × List ScopeInfo)) : List ScopeInfo :=
+  let allDeps := graph.foldl (fun acc (_,deps) => acc ++ deps) []
+  let roots := graph.filter (fun (s,_) => !(allDeps.any (fun d => d == s))) |>.map (·.1)
+  dbg_trace s!"MINSCOPE.sort: roots found: {roots.map (fun r => r.boundVars)}"
+  roots
 
-  -- Main buildFormula logic
-  dbg_trace s!"\nMINSCOPE:buildFormula entry"
-  dbg_trace s!"  Input scopes: {scopes.map (fun s => s!"{s.predicate}/{s.scopeType}")}"
-  dbg_trace s!"  Input preds before filtering: {preds.map (fun p => s!"{p.predicate.predicate}[scope={p.scope}]")}"
-  dbg_trace s!"  Scoped events: {scopedEvents}"
-
-  (match scopes, preds with
-  | [], [] => 
-    dbg_trace "MINSCOPE:  Empty scopes and preds - returning empty conjunction"
-    Formula.conj []
-    
-  | [], remaining => 
-    dbg_trace s!"MINSCOPE:  No scopes but {remaining.length} predicates - grouping by events"
-    let groups := findEventGroups (remaining.map (·.predicate))
-    dbg_trace s!"MINSCOPE:  Found event groups: {groups.map (fun g => g.map (·.predicate))}"
-    buildEventConj groups (Formula.conj []) scopedEvents
-    
-  | scope :: restScopes, preds =>
-    dbg_trace s!"MINSCOPE:  Processing scope {scope.predicate} [{scope.scopeType}]"
-    dbg_trace s!"  Raw predicates before scope processing: {preds.map (fun p => s!"{p.predicate.predicate}[scope={p.scope}]")}"
-    
-    if scope.scopeType == ScopeType.Definite && 
-       (scope.predicate == "the_q" || scope.predicate == "_the_q") then
-      dbg_trace "MINSCOPE:  THE_Q scope detected"
-      
-      (match scope.boundVars.head? with
-      | none => 
-        dbg_trace "MINSCOPE:    ERROR: THE_Q scope has no bound variables"
-        unreachable!
-      | some theqVar =>
-        dbg_trace s!"MINSCOPE:    THE_Q bound var: {theqVar}"
-        dbg_trace s!"MINSCOPE:    Starting partition check on predicates: {preds.map (fun p => s!"{p.predicate.predicate}[scope={p.scope}]")}"
-        let partition := preds.partition (fun ep =>
-          dbg_trace s!"MINSCOPE:      Testing partition for {ep.predicate.predicate}[scope={ep.scope}]"
-          (match ep.scope with
-          | none => 
-            dbg_trace s!"MINSCOPE:      Pred {ep.predicate.predicate} - no scope, not RSTR"
-            false
-          | some scopeVar =>
-            let isRstr := scopeVar.sort == 'r' && scopeVar.id == theqVar.id
-            dbg_trace s!"MINSCOPE:      Pred {ep.predicate.predicate} - scope={scopeVar}, theqVar={theqVar}, isRstr={isRstr}"
-            isRstr))
-            
-        dbg_trace s!"MINSCOPE:    RSTR preds: {partition.1.map (·.predicate.predicate)}"
-        dbg_trace s!"MINSCOPE:    BODY preds: {partition.2.map (·.predicate.predicate)}"
-        
-        let rstrFormula := Formula.scope [] (some "rstr_guard") 
-          (Formula.conj (partition.1.map (·.predicate) |>.map Formula.atom))
-        dbg_trace s!"MINSCOPE:    RSTR formula:\n{dumpFormula rstrFormula 6}"
-        
-        let bodyFormula := buildFormula restScopes partition.2 scopedEvents
-        dbg_trace s!"MINSCOPE:    BODY formula:\n{dumpFormula bodyFormula 6}"
-        
-        let result := buildScopedFormula scope (Formula.conj [rstrFormula, bodyFormula])
-        dbg_trace s!"MINSCOPE:    Final THE_Q result:\n{dumpFormula result 6}"
-        result)
-
+partial def topoSort (graph : List (ScopeInfo × List ScopeInfo)) : List ScopeInfo :=
+  let rec topoSortWithVisited (graph : List (ScopeInfo × List ScopeInfo)) 
+                             (visited : List ScopeInfo) : List ScopeInfo :=
+    if graph.isEmpty then []
     else
-      dbg_trace "MINSCOPE:  Regular scope processing"
-      dbg_trace s!"MINSCOPE:    Finding predicates for this scope"
-      
-      let (hereEps, otherEps) := preds.partition (fun ep => 
-        match determineMinScope ep (scope :: restScopes) with
-        | some s =>
-          let isHere := s == scope
-          dbg_trace s!"MINSCOPE:      Pred {ep.predicate.predicate} - can lift to {s.predicate}, here?={isHere}"
-          isHere
-        | none =>
-          dbg_trace s!"MINSCOPE:      Pred {ep.predicate.predicate} - cannot lift"
-          false)
-      
-      dbg_trace s!"MINSCOPE:    Here preds: {hereEps.map (·.predicate.predicate)}"
-      dbg_trace s!"MINSCOPE:    Other preds: {otherEps.map (·.predicate.predicate)}"
-      
-      let groups := findEventGroups (hereEps.map (·.predicate))
-      dbg_trace s!"MINSCOPE:    Event groups at this level: {groups.map (fun g => g.map (·.predicate))}"
-      
-      let groupEvents := groups.foldl (fun acc g => 
-        let newEvents := (g.foldl (fun acc2 ep => acc2 ++ getEventVars ep) [])
-        dbg_trace s!"MINSCOPE:      Group events: {newEvents}"
-        (acc ++ newEvents).eraseDups) []
-      dbg_trace s!"MINSCOPE:    All group events: {groupEvents}"
-      
-      let newScopedEvents := scopedEvents ++ groupEvents
-      dbg_trace s!"MINSCOPE:    Combined scoped events: {newScopedEvents}"
-      
-      let innerFormula := buildFormula restScopes otherEps newScopedEvents
-      dbg_trace s!"MINSCOPE:    Inner formula:\n{dumpFormula innerFormula 6}"
-      
-      let eventFormula := buildEventConj groups innerFormula scopedEvents
-      dbg_trace s!"MINSCOPE:    Event formula:\n{dumpFormula eventFormula 6}"
-      
-      let result := buildScopedFormula scope eventFormula
-      dbg_trace s!"MINSCOPE:  Regular scope result:\n{dumpFormula result 4}"
-      result)
+      let roots := graph.filter (fun (s,deps) => 
+        deps.all (fun d => visited.contains d)) |>.map (·.1)
+      match roots with 
+      | [] => 
+          -- If no roots and graph not empty, we have a cycle - just pick first node
+          let first := graph.head!.1
+          let remainingGraph := graph.filter (fun (s,_) => s != first)
+          dbg_trace s!"MINSCOPE.sort: cycle detected, choosing {first.boundVars}"
+          first :: topoSortWithVisited remainingGraph (first :: visited)
+      | _ =>
+          dbg_trace s!"MINSCOPE.sort: using roots {roots.map (fun r => r.boundVars)}"
+          let remainingGraph := graph.filter (fun (s,_) => !roots.contains s)
+          roots ++ topoSortWithVisited remainingGraph (visited ++ roots)
 
-partial def minimizeScoping (f : Formula) : Formula := 
-  dbg_trace "MINSCOPE:minimizeScoping starting"
-  let (scopes, preds) := analyzeFormula f
+  topoSortWithVisited graph []
+
+def sortScopes (scopes : List ScopeInfo) (preds : List ScopedEP) : List ScopeInfo :=
+  -- Split proper_q and other scopes
+  let (properScopes, otherScopes) := scopes.partition (fun s => 
+    s.predicate == "proper_q" || s.predicate == "_proper_q")
+  dbg_trace s!"MINSCOPE.sort: found {properScopes.length} proper_q, {otherScopes.length} other scopes"
+
+  -- Sort each group by dependencies independently
+  let properGraph := buildDependencyGraph properScopes preds
+  let otherGraph := buildDependencyGraph otherScopes preds
+
+  let properSorted := topoSort properGraph
+  let otherSorted := topoSort otherGraph
+
+  dbg_trace s!"MINSCOPE.sort: proper_q order: {properSorted.map (fun s => s.boundVars)}"
+  dbg_trace s!"MINSCOPE.sort: other order: {otherSorted.map (fun s => s.boundVars)}"
   
-  let result := buildFormula scopes preds []
-  dbg_trace s!"MINSCOPE:minimizeScoping complete\n  result={result}"
-  result
+  properSorted ++ otherSorted
+
+mutual
+
+partial def buildEventConj (groups : List (List EP)) (inner : Formula) (scopedEvents : List Var) : Formula :=
+  match groups with
+  | [] => inner
+  | g :: gs => 
+    let groupEvents := g.foldl (fun acc ep => (acc ++ getEventVars ep).eraseDups) []
+    let newEvents := groupEvents.filter (fun v => !(scopedEvents.any (fun e => e == v)))
+    if newEvents.isEmpty then
+      Formula.conj (g.map Formula.atom ++ [buildEventConj gs inner scopedEvents])
+    else  
+      Formula.scope newEvents none
+        (Formula.conj (g.map Formula.atom ++ [buildEventConj gs inner (scopedEvents ++ newEvents)]))
+
+partial def buildScopedFormulas (scopes : List ScopeInfo) (preds : List ScopedEP) 
+    (events : List Var) (depth : Nat) : Formula :=
+  match depth with
+  | 0 => Formula.conj []  -- Emergency recursion limit
+  | depth + 1 =>
+    match scopes with
+    | [] => buildFormula [] preds events
+    | scope :: restScopes =>
+      match scope.scopeType with
+      | ScopeType.Definite =>
+        match scope.boundVars.head? with
+        | none => unreachable!
+        | some boundVar =>
+          let rstrVar := {id := boundVar.id, sort := 'r', props := #[]}
+          let bodyVar := {id := boundVar.id, sort := 'b', props := #[]}
+          
+          let (rstrPreds, bodyPreds) := preds.partition (fun ep =>
+            match ep.scope with
+            | none => false
+            | some scopeVar => isRstrVar scopeVar && scopeVar.id == boundVar.id)
+          dbg_trace s!"MINSCOPE.formula: definite scope partitioned {rstrPreds.length}/{bodyPreds.length}"
+
+          let rstrFormula := buildScopedFormulas restScopes rstrPreds events depth
+          let bodyFormula := buildScopedFormulas restScopes bodyPreds events depth
+          
+          let guardedRstr := Formula.scope [rstrVar] (some "rstr_guard") rstrFormula
+          let guardedBody := Formula.scope [bodyVar] (some "body_guard") bodyFormula
+          
+          buildScopedFormula scope (Formula.conj [guardedRstr, guardedBody])
+
+      | _ =>
+        -- Partition predicates for this scope
+        let (scopePreds, otherPreds) := preds.partition (fun ep =>
+          match ep.scope with
+          | none => false
+          | some scopeVar => scope.boundVars.any (fun v => v == scopeVar))
+        dbg_trace s!"MINSCOPE.formula: scope {scope.predicate} partitioned {scopePreds.length}/{otherPreds.length}"
+
+        -- Handle predicates at this scope level
+        let predsFormula := Formula.conj (scopePreds.map (·.predicate) |>.map Formula.atom)
+        
+        -- Recursively handle remaining scopes
+        let innerFormula := buildScopedFormulas restScopes otherPreds events depth
+        
+        buildScopedFormula scope (Formula.conj [predsFormula, innerFormula])
+
+partial def buildFormula (scopes : List ScopeInfo) (preds : List ScopedEP) 
+    (scopedEvents : List Var) : Formula :=
+  match scopes with
+  | [] => 
+    match preds with
+    | [] => Formula.conj []
+    | remaining => 
+      -- Just handle event groups for remaining preds
+      let groups := findEventGroups (remaining.map (·.predicate))
+      dbg_trace s!"MINSCOPE.formula: handling {groups.length} event groups"
+      buildEventConj groups (Formula.conj []) scopedEvents
+  | _ =>
+    -- Sort scopes based on dependencies
+    let sortedScopes := sortScopes scopes preds
+    dbg_trace s!"MINSCOPE.formula: sorted scope order: {sortedScopes.map (fun s => (s.predicate, s.boundVars))}"
+
+    -- Build formula with recursion depth limit
+    buildScopedFormulas sortedScopes preds scopedEvents 1000
+
+end
+
+def minimizeScoping (f : Formula) : Formula := 
+  dbg_trace s!"MINSCOPE.minimizeScoping: input formula={f}"
+  let (scopes, preds) := analyzeFormula f
+  buildFormula scopes preds []
 
 end PWL.Transform.MinScoping
-
-export PWL.Transform.MinScoping (buildFormula buildEventConj buildEventGroupFormula buildScopedFormula minimizeScoping)

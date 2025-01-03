@@ -1,6 +1,7 @@
 import Mrs.Basic
 import Mrs.PwlTypes
 import Mrs.PwlTransformShared
+import Mrs.PwlTransformMinScoping_Types
 import Mrs.PwlTransformMinScoping_Core
 import Util.InsertionSort
 
