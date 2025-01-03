@@ -150,30 +150,25 @@ Should look for:
 4. named(X2,s2)  
 5. compound(e,X1,X2)
 
-And rewrite this into:
+And record this patterns as.
 ```
 temp_compound_name(X1,X2,A,B,s)
+
+where s = s1 + " " + s2)
 ```
 
 ### Phase 2
-Should rewrite:
-```
-temp_compound_name(X1,X2,A,B,s)
-```
-into a Formula structure that represents an equivalent logical form to:
-```
-proper_q(X1,named(X1,s1),A & B, carg=s1 + " " + s2)
-```
-The Formula structure must capture the variable bindings, argument dependencies, and combined name string in a form that phase 3 can serialize appropriately.
+Should rewrite..
 
-### Phase 3
-Phase 3 converts X2 to X1, eliminating it from all predicates.
+  named(X1,s1) -> named(X1,s)
+  named(X2,s2) -> X2 = X1.
+  
+..and it should drop the compound predicate.
 
-### Phase 4
-Phase 4 performs minimum scoping as described above.
+Meanwhile, phase 2 will convert the predicates into a Formula structure that must capture the variable bindings, argument dependencies, and combined name string in a form that phase 3 can serialize appropriately.
 
-### Phase 5 
-Phase 5 simplifies negation scopes:
+### Phase 3 
+Phase 3 simplifies negation scopes:
 1. Identify Formula.scope nodes with "neg" or "never_a_1" quantifiers
 2. Check if the event variable in scope is actually used in the inner formula
 3. For unused event variables, remove the scope while preserving the negation operation 
@@ -184,8 +179,8 @@ For example:
  ~?[]:(/* neg */ inner)       ; scope removed but negation preserved 
  ~inner                       ; (not done by Phase 5, but by Phase 6 serialization)
 
-### Phase 6
-Phase 6 serializes to PWL format as follows:
+### Phase 4
+Phase 4 serializes to PWL format as follows:
 
 A named predicate like:
 ```
