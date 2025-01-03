@@ -2,6 +2,7 @@ import Mrs.Basic
 import Mrs.PwlTypes
 import Mrs.PwlTransformShared 
 import Mrs.PwlTransformScopingCore
+import Mrs.PwlTransformMinScoping_Variables
 import Mrs.Hof
 import Util.InsertionSort
 
@@ -19,44 +20,128 @@ open Lean (HashMap)
 def normalizePredicate (p : String) : String :=
   if p.startsWith "_" then p.drop 1 else p
 
-mutual 
+def isHigherOrder (pred : String) : Bool :=
+  pred == "colon_p_namely" || pred == "_colon_p_namely" ||
+  pred == "neg" || pred == "_neg" ||
+  pred == "never_a_1" || pred == "_never_a_1"
+
+def isEventOrImplicit (v : Var) : Bool :=
+  v.sort == 'e' || v.sort == 'i'
+
+def isEventReferenced (ev : Var) (preds : List EP) : Bool :=
+  preds.any fun p =>
+    if isHigherOrder p.predicate then
+      false 
+    else
+      p.rargs.any fun arg => arg.2 == ev && arg.2.sort == 'e'
+
+def isHandleReferenced (h : Var) (preds : List EP) : Bool :=
+  preds.any fun p => p.rargs.any fun arg => arg.2 == h
+
+def collectScopeEvents (preds: List EP) : List Var :=
+  preds.foldl (fun acc ep => 
+    let events := ep.rargs.filter (fun arg => arg.2.sort == 'e') |>.map (·.2)
+    let referenced := events.filter (fun ev => isEventReferenced ev preds)
+    (acc ++ referenced).eraseDups
+  ) []
+
+def processQuantifierEvents (rstrPreds : List EP) (bodyPreds : List EP) : 
+    (List Var × List Var × List Var) :=
+  let rstrEvents := collectScopeEvents rstrPreds
+  let bodyEvents := collectScopeEvents bodyPreds
+  
+  -- Find events used in both scopes
+  let sharedEvents := rstrEvents.filter (fun ev => bodyEvents.contains ev)
+  
+  -- Find events used only in one scope
+  let rstrOnlyEvents := rstrEvents.filter (fun ev => !(bodyEvents.contains ev))
+  let bodyOnlyEvents := bodyEvents.filter (fun ev => !(rstrEvents.contains ev))
+  
+  (sharedEvents, rstrOnlyEvents, bodyOnlyEvents)
+
+def buildQuantifierFormula (quantType : String) (arg0 : Var) (rstrFormula : Formula) 
+    (bodyFormula : Formula) (sharedEvents : List Var) (rstrEvents : List Var) 
+    (bodyEvents : List Var) : Formula :=
+  -- Build inner parts first with local scoping
+  let scopedRstr := if rstrEvents.isEmpty then 
+    rstrFormula
+  else
+    Formula.scope rstrEvents none rstrFormula
+
+  let scopedBody := if bodyEvents.isEmpty then
+    bodyFormula
+  else  
+    Formula.scope bodyEvents none bodyFormula
+
+  -- Then build quantifier with shared event scope
+  let guardedRstr := Formula.scope [] (some "rstr_guard") scopedRstr
+  let guardedBody := Formula.scope [] (some "body_guard") scopedBody
+  let inner := Formula.conj [guardedRstr, guardedBody]
+
+  if sharedEvents.isEmpty then
+    Formula.scope [arg0] (some quantType) inner
+  else
+    Formula.scope sharedEvents none $
+      Formula.scope [arg0] (some quantType) inner
+
+mutual
+
 partial def processPredicates (parent : Var) (eps : List EP) (seenHandles : List Var) 
-    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
+    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) (inQuant : Bool := false) : (Option Formula × Stats) :=
   dbg_trace s!"RECURSE: processPredicates parent={parent} eps={eps.map (fun p => (p.predicate, p.label))}"
-  dbg_trace s!"RECURSE: seen handles={seenHandles}"
   match eps with
-  | [] => 
-    dbg_trace s!"RECURSE: empty eps for parent={parent}"
-    (some (Formula.conj []), stats)
+  | [] => (some (Formula.conj []), stats)
   | [ep] => 
-    dbg_trace s!"RECURSE: single EP {(ep.predicate, ep.label)} for parent={parent}"
-    processEP parent ep seenHandles hm stats ev
-  | eps =>
-    dbg_trace s!"RECURSE: multiple EPs for parent={parent}: {eps.map (fun p => (p.predicate, p.label))}"
+    match processEP parent ep seenHandles hm stats ev with
+    | (some formula, stats1) =>
+      -- Only collect events when not in a quantifier
+      if inQuant then
+        (some formula, stats1)
+      else
+        let events := collectScopeEvents [ep]
+        let result := if events.isEmpty then formula 
+          else Formula.scope events none formula
+        (some result, stats1)
+    | (none, stats1) => (none, stats1)
+  | eps => 
     match processEPs parent eps seenHandles hm stats ev with
     | (formulas, finalStats) =>
       match formulas with
-      | [] => 
-        dbg_trace s!"RECURSE: no formulas generated for parent={parent}"
-        (some (Formula.conj []), finalStats)
+      | [] => (some (Formula.conj []), finalStats)
+      | [f] => 
+        if inQuant then
+          (some f, finalStats)
+        else
+          let events := collectScopeEvents eps
+          let result := if events.isEmpty then f
+            else Formula.scope events none f
+          (some result, finalStats)
       | fs => 
-        dbg_trace s!"RECURSE: generated formulas for parent={parent}: {fs}"
-        (some (Formula.conj fs), finalStats)
+        let filtered := fs.filter (fun f => !f.isEmptyConj)
+        if inQuant then
+          (some (Formula.conj filtered), finalStats)
+        else
+          -- Scope any event variables used at this level
+          let events := collectScopeEvents eps
+          let formula := Formula.conj filtered
+          let result := if events.isEmpty then formula
+            else Formula.scope events none formula
+          (some result, finalStats)
 
 partial def processEPs (parent : Var) (eps : List EP) (seenHandles : List Var)
     (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (List Formula × Stats) :=
   eps.foldl (fun (acc, stats) ep =>
     match processEP parent ep seenHandles hm stats ev with
-    | (some formula, newStats) => (acc ++ [formula], newStats) 
+    | (some formula, newStats) => 
+      let newAcc := if formula.isEmptyConj then acc else acc ++ [formula]
+      (newAcc, newStats)
     | (none, newStats) => (acc, newStats)) ([], stats)
 
 partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
     (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
-  dbg_trace s!"RECURSE: processEP parent={parent} ep={ep.predicate}({ep.label}) args={ep.rargs}"
-  dbg_trace s!"RECURSE: current seen handles={seenHandles}"
+  dbg_trace s!"RECURSE: processEP parent={parent} ep={ep.predicate}({ep.label})"
   
   if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
-    dbg_trace s!"RECURSE: skipping {ep.label} - already seen or eliminated"
     (none, stats)
   else
     let newSeen := ep.label :: seenHandles
@@ -64,74 +149,98 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
     
     match normalized with
     | "neg" | "never_a_1" =>
-      dbg_trace s!"RECURSE: processing negation at {ep.label}"
       match ep.rargs.find? (fun arg => arg.1 == "ARG1"), ep.rargs.find? (fun arg => arg.1 == "ARG0") with
       | some (_, handle), some (_, evar) =>
         let innerPreds := hm.find? handle |>.getD []
-        match processPredicates ep.label innerPreds newSeen hm stats ev with
+        let isEvarReferenced := isEventReferenced evar innerPreds
+        match processPredicates ep.label innerPreds newSeen hm stats ev true with
         | (none, stats1) => (none, stats1)
         | (some inner, stats1) =>
-          (some (Formula.scope [evar] (some ep.predicate) inner), addStat stats1 2)
+          let negFormula := if isEvarReferenced then
+            Formula.scope [evar] (some ep.predicate) inner
+          else
+            inner
+          (some negFormula, addStat stats1 2)
       | _, _ => (none, stats)
     
+    | "therefore_a_1" =>
+      -- Get the handle argument
+      match ep.rargs.find? (fun arg => arg.1 == "ARG1") with
+      | none => (some (Formula.atom ep), stats)
+      | some (_, handle) =>
+        match hm.find? handle with
+        | none => (none, stats)
+        | some preds =>
+          -- Get content of handle
+          match preds.head? with
+          | none => (none, stats)
+          | some handleEP =>
+            -- Extract implicit variables, unknown variables, and event variables
+            let implicitVars := ep.rargs.filter (fun arg => arg.2.sort == 'i') |>.map (·.2)
+            let unknownVars := handleEP.rargs.filter (fun arg => arg.2.sort == 'u') |>.map (·.2)
+            let eventVars := handleEP.rargs.filter (fun arg => arg.2.sort == 'e') |>.map (·.2)
+            -- Build formula combining therefore_a_1 (without handle ref) with expanded handle content
+            let cleanedEP := { ep with rargs := ep.rargs.filter (fun arg => arg.2.sort != 'h') }
+            let baseFormula := Formula.atom cleanedEP
+            let handleFormula := Formula.atom handleEP
+            let combined := Formula.conj [baseFormula, handleFormula]
+            -- Scope all collected variables
+            let allVars := (implicitVars ++ unknownVars ++ eventVars).eraseDups
+            let scopedFormula := if allVars.isEmpty then combined
+                                else Formula.scope allVars none combined
+            (some scopedFormula, stats)
+    
     | "colon_p_namely" =>
-      dbg_trace s!"RECURSE: processing colon_p_namely at {ep.label}"
       match ep.rargs.find? (fun arg => arg.1 == "ARG0"), 
             ep.rargs.find? (fun arg => arg.1 == "ARG1"), 
             ep.rargs.find? (fun arg => arg.1 == "ARG2") with
       | some (_, evar), some (_, handle1), some (_, handle2) =>
-        let innerPreds1 := hm.find? handle1 |>.getD []
-        let innerPreds2 := hm.find? handle2 |>.getD []
-        match processPredicates handle1 innerPreds1 newSeen hm stats ev with
-        | (none, stats1) => (none, stats1)
-        | (some part1, stats1) =>
-          match processPredicates handle2 innerPreds2 newSeen hm stats1 ev with
-          | (none, stats2) => (none, stats2)
-          | (some part2, stats2) =>
-            (some (Formula.scope [evar] (some ep.predicate) (Formula.conj [part1, part2])), addStat stats2 4)
+        let preds1 := hm.find? handle1 |>.getD []
+        let preds2 := hm.find? handle2 |>.getD []
+        let isEvarReferenced := isEventReferenced evar (preds1 ++ preds2)
+        match processPredicates handle1 preds1 newSeen hm stats ev true,
+              processPredicates handle2 preds2 newSeen hm stats ev true with
+        | (some part1, stats1), (some part2, stats2) =>
+          let conj := Formula.conj [part1, part2]
+          let colonFormula := if isEvarReferenced then
+            Formula.scope [evar] (some ep.predicate) conj
+          else
+            conj
+          (some colonFormula, addStat stats2 4)
+        | _, _ => (none, stats)
       | _, _, _ => (none, stats)
 
-    | "the_q" =>
-      dbg_trace s!"RECURSE: processing the_q at {ep.label}"
-      match getOrderedQuantArgs ep.rargs with
-      | none => (none, stats)
-      | some (arg0, rstr, body) =>
-        -- let rstrVar := {id := arg0.id, sort := 'r', props := #[]}
-        -- let bodyVar := {id := arg0.id, sort := 'b', props := #[]}
-        let rstrPreds := hm.find? rstr |>.getD []
-        let bodyPreds := hm.find? body |>.getD []
-        match processPredicates ep.label rstrPreds newSeen hm stats ev with
-        | (none, stats1) => (none, stats1)
-        | (some rstrFormula, stats1) =>
-          match processPredicates ep.label bodyPreds newSeen hm stats1 ev with
-          | (none, stats2) => (none, stats2)
-          | (some bodyFormula, stats2) =>
-            let formula := Formula.scope [arg0] (some "the_q") (Formula.conj [
-              -- Formula.scope [rstrVar] (some "rstr_guard") rstrFormula,
-              -- Formula.scope [bodyVar] (some "body_guard") bodyFormula
-              Formula.scope [] (some "rstr_guard") rstrFormula,
-              Formula.scope [] (some "body_guard") bodyFormula
-            ])
-            (some formula, addStat stats2 3)
-
     | p =>
-      if lastTwoChars p == "_q" then
-        dbg_trace s!"RECURSE: processing quantifier {p} at {ep.label}"
+      if p == "the_q" || lastTwoChars p == "_q" then
         match getOrderedQuantArgs ep.rargs with
         | none => (none, stats)
         | some (arg0, rstr, body) =>
           let rstrPreds := hm.find? rstr |>.getD []
           let bodyPreds := hm.find? body |>.getD []
-          match processPredicates ep.label rstrPreds newSeen hm stats ev with
-          | (none, stats1) => (none, stats1)
-          | (some rstrFormula, stats1) =>
-            match processPredicates ep.label bodyPreds newSeen hm stats1 ev with
-            | (none, stats2) => (none, stats2)
-            | (some bodyFormula, stats2) =>
-              (some (Formula.scope [arg0] (some p) (Formula.conj [rstrFormula, bodyFormula])),
-               addStat stats2 3)
+          
+          match processPredicates ep.label rstrPreds newSeen hm stats ev true,
+                processPredicates ep.label bodyPreds newSeen hm stats ev true with
+          | (some rstrFormula, stats1), (some bodyFormula, stats2) =>
+            let (sharedEvents, rstrEvents, bodyEvents) := 
+              processQuantifierEvents rstrPreds bodyPreds
+
+            -- Skip RSTR guard if there were no RSTR predicates
+            let noRstr := rstrPreds.isEmpty && !isHandleReferenced rstr bodyPreds
+              
+            let formula := if noRstr then
+              -- Just wrap the body formula in the quantifier 
+              if sharedEvents.isEmpty then
+                Formula.scope [arg0] (some p) bodyFormula
+              else
+                Formula.scope sharedEvents none $
+                  Formula.scope [arg0] (some p) bodyFormula
+            else
+              buildQuantifierFormula p arg0 rstrFormula bodyFormula 
+                sharedEvents rstrEvents bodyEvents
+
+            (some formula, addStat stats2 3)
+          | _, _ => (none, stats)
       else 
-        dbg_trace s!"RECURSE: atomic predicate {p} at {ep.label}"
         (some (Formula.atom ep), stats)
 
 end

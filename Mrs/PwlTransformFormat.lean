@@ -1,6 +1,5 @@
 import Mrs.Basic
 import Mrs.PwlTypes
-import Mrs.PwlTransformShared
 import Mrs.PwlTransformMinScoping_Types
 import Mrs.Hof
 import Util.InsertionSort
@@ -78,7 +77,7 @@ def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent 
     result
 
 def formatPredArgs : String → List (String × Var) → Option String → Nat → Bool → String
-  | pred, args, carg, indent, isAtomWithRest => 
+  | pred, args, carg, indent, isAtomWithRest =>
   let indentStr := makeIndent indent
   
   dbg_trace s!"FORMAT[{indent}]: pred={pred}, inParen={isAtomWithRest}, carg={carg}, args={args}"
@@ -86,10 +85,10 @@ def formatPredArgs : String → List (String × Var) → Option String → Nat �
   if pred == "named" || pred == "_named" then
     match args.find? (fun p => p.1 == "ARG0"), carg with
     | some (_, var), some str =>
-      s!"{indentStr}(name(n) & arg1(n)={var} & arg2(n)={str})"
+      s!"{indentStr}?[n]:(name(n) & arg1(n)={var} & arg2(n)={str})"
     | _, _ =>
       s!"{indentStr}named({args.head!.2})"
-  else 
+  else
     formatSinglePredicate pred args indentStr isAtomWithRest
 
 def formatConjunction (ep : EP) (indent : Nat) : String :=
