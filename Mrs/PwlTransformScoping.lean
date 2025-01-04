@@ -33,14 +33,14 @@ def isEventReferenced (ev : Var) (preds : List EP) : Bool :=
     if isHigherOrder p.predicate then
       false 
     else
-      p.rargs.any fun arg => arg.2 == ev && arg.2.sort == 'e'
+      p.rargs.any fun arg => arg.2 == ev && (arg.2.sort == 'e' || arg.2.sort == 'i')
 
 def isHandleReferenced (h : Var) (preds : List EP) : Bool :=
   preds.any fun p => p.rargs.any fun arg => arg.2 == h
 
 def collectScopeEvents (preds: List EP) : List Var :=
   preds.foldl (fun acc ep => 
-    let events := ep.rargs.filter (fun arg => arg.2.sort == 'e') |>.map (·.2)
+    let events := ep.rargs.filter (fun arg => arg.2.sort == 'e' || arg.2.sort == 'i') |>.map (·.2)
     let referenced := events.filter (fun ev => isEventReferenced ev preds)
     (acc ++ referenced).eraseDups
   ) []

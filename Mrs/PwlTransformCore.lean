@@ -1,11 +1,11 @@
 import Mrs.Basic
-import Mrs.PwlTypes 
+import Mrs.PwlTypes
 import Mrs.PwlTransformScopingCore
 import Mrs.PwlTransformScoping
-import Mrs.PwlTransformShared 
 import Mrs.PwlTransformSerialize
 import Mrs.PwlTransformNegationScopeRemoval
 import Mrs.PwlTransformEqualityRemoval
+import Mrs.PwlTransformCompoundRemoval
 import Mrs.Hof
 import Util.InsertionSort
 
@@ -13,7 +13,6 @@ namespace PWL.Transform
 
 open MRS (Var EP Constraint MRS)
 open MM (Multimap)
-open Lean (Format HashMap)
 open InsertionSort
 open PWL.Transform.ScopingCore (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle)
 open PWL.Transform.Scoping (processPredicates)
@@ -187,6 +186,8 @@ def phase3_1_with_debug (f : Formula) : Formula :=
   dbg_trace "=== FINISHED EQUALITY SIMPLIFICATION ==="
   result
 
+def phase3_2 := PWL.Transform.CompoundRemoval.simplifyCompounds
+
 def phase4 (f : Formula) : String :=
   dbg_trace "Phase 4 - Serializing to PWL format"
   formatAsPWL f none
@@ -217,8 +218,9 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       dbg_trace s!"POST_PHASE3: Negation simplified: {negSimplified}"
       let equalitySimplified := phase3_1_with_debug negSimplified
       dbg_trace s!"POST_PHASE3.1: Equality simplified: {equalitySimplified}"
-      -- let equalitySimplified := negSimplified
-      let result := phase4 equalitySimplified
+      let compoundSimplified := phase3_2 equalitySimplified 
+      dbg_trace s!"POST_PHASE3.2: Compound simplified: {compoundSimplified}"
+      let result := phase4 compoundSimplified
       dbg_trace s!"Final result: {result}"
       result
 

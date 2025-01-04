@@ -38,13 +38,16 @@ def makeIndent (n : Nat) : String :=
   dbg_trace s!"FORMAT.makeIndent n={n}"
   String.mk (List.replicate n ' ')
 
-def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent : String) (isAtomWithRest : Bool := false) : String :=
+def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent : String) (carg : Option String) (isAtomWithRest : Bool := false) : String :=
   dbg_trace s!"FORMAT.formatSinglePredicate starting with:\n  pred={pred}\n  args={args}\n  indent='{indent}'\n  isAtomWithRest={isAtomWithRest}"
   
   -- Special case for equality predicate
   if pred == "=" then
     match args with
-    | [(_, var1), (_, var2)] => s!"{indent}({var1} = {var2})"
+    | [(_, var1), (_, var2)] => 
+      match carg with
+      | some comment => s!"{indent}({var1} = {var2}) {comment}"
+      | none => s!"{indent}({var1} = {var2})"
     | _ => indent ++ "=" -- fallback case though this shouldn't happen
   else
     -- Original formatting logic for other predicates
@@ -76,8 +79,7 @@ def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent 
     dbg_trace s!"FORMAT.formatSinglePredicate returns: '{result}'"
     result
 
-def formatPredArgs : String → List (String × Var) → Option String → Nat → Bool → String
-  | pred, args, carg, indent, isAtomWithRest =>
+def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option String) (indent : Nat) (isAtomWithRest : Bool) : String :=
   let indentStr := makeIndent indent
   
   dbg_trace s!"FORMAT[{indent}]: pred={pred}, inParen={isAtomWithRest}, carg={carg}, args={args}"
@@ -89,7 +91,7 @@ def formatPredArgs : String → List (String × Var) → Option String → Nat �
     | _, _ =>
       s!"{indentStr}named({args.head!.2})"
   else
-    formatSinglePredicate pred args indentStr isAtomWithRest
+    formatSinglePredicate pred args indentStr carg isAtomWithRest
 
 def formatConjunction (ep : EP) (indent : Nat) : String :=
   dbg_trace s!"FORMAT CONJ: {ep.predicate} with args {ep.rargs.map (fun (n,v) => s!"{n}={v.sort}{v.id}")}"
