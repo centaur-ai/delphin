@@ -3,9 +3,9 @@ import Mrs.PwlTypes
 import Mrs.PwlTransformScopingCore
 import Mrs.PwlTransformScoping
 import Mrs.PwlTransformShared 
-import Mrs.PwlTransformMinScoping
 import Mrs.PwlTransformSerialize
 import Mrs.PwlTransformNegationScopeRemoval
+import Mrs.PwlTransformEqualityRemoval
 import Mrs.Hof
 import Util.InsertionSort
 
@@ -179,6 +179,14 @@ def phase2 (parent : Var) (handle : Var) (preds : List EP) (ev : EliminatedVars)
 
 def phase3 := PWL.Transform.NegationScopeRemoval.simplifyNegation
 
+def phase3_1_with_debug (f : Formula) : Formula := 
+  dbg_trace "\n=== STARTING EQUALITY SIMPLIFICATION (PHASE 3.1) ==="
+  dbg_trace s!"Input formula: {f}"
+  let result := PWL.Transform.EqualityRemoval.simplifyEqualities f
+  dbg_trace s!"Output formula: {result}"
+  dbg_trace "=== FINISHED EQUALITY SIMPLIFICATION ==="
+  result
+
 def phase4 (f : Formula) : String :=
   dbg_trace "Phase 4 - Serializing to PWL format"
   formatAsPWL f none
@@ -207,7 +215,10 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       dbg_trace s!"POST_PHASE2: Generated formula: {formula}"
       let negSimplified := phase3 formula
       dbg_trace s!"POST_PHASE3: Negation simplified: {negSimplified}"
-      let result := phase4 negSimplified
+      let equalitySimplified := phase3_1_with_debug negSimplified
+      dbg_trace s!"POST_PHASE3.1: Equality simplified: {equalitySimplified}"
+      -- let equalitySimplified := negSimplified
+      let result := phase4 equalitySimplified
       dbg_trace s!"Final result: {result}"
       result
 
