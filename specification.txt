@@ -179,6 +179,21 @@ For example:
  ~?[]:(/* neg */ inner)       ; scope removed but negation preserved 
  ~inner                       ; (not done by Phase 5, but by Phase 6 serialization)
 
+### Phase 3.1
+Phase 3.1 simplifies equality expressions to remove redundant variables and scopes:
+1. When an equality x1 = x2 is found, and x1 appears in an outer scope, replace all instances of x2 with x1
+2. Preserve equality expressions in RSTR guards
+3. If all variables in a scope are eliminated by equality substitution, remove the scope
+4. Process nested formulas recursively
+
+### Phase 3.2
+Phase 3.2 transforms compound predicates into equality statements:
+1. For any compound(e, x1, x2) predicate:
+   - Convert to equality between x variables: x1 = x2
+   - Add comment /* compound */ to indicate source
+   - Remove the e variable scope if no other references exist
+2. Pass through all other predicates unchanged
+
 ### Phase 4
 Phase 4 serializes to PWL format as follows:
 
