@@ -1,28 +1,22 @@
 ?[x29]:(/* proper_q */
   ?[n]:(name(n) & arg1(n)=x29 & arg2(n)="Aunt Agatha") &
   ?[x10]:(/* proper_q */
-    ?[x16]:(/* proper_q */
-      ?[n]:(name(n) & arg1(n)=x10 & arg2(n)="Mansion Dreadbury") &
-      (x16 = x10)) &
-    ?[x23]:(/* proper_q */
-      (x23 = x29) &
-      ?[x3]:(/* some_q */
-        ?[e8,e9]:(
-          (in_p_loc(e9) & arg1(e9)=e8 & arg2(e9)=x10) &
-          (live_v_1(e8) & arg1(e8)=x3) &
-          person(x3)) &
-        ?[e2]:(
-          (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x23))))))
+    ?[n]:(name(n) & arg1(n)=x10 & arg2(n)="Mansion Dreadbury") &
+    ?[x3]:(/* some_q */
+      ?[e8,e9]:(
+        (in_p_loc(e9) & arg1(e9)=e8 & arg2(e9)=x10) &
+        (live_v_1(e8) & arg1(e8)=x3) &
+        person(x3)) &
+      ?[e2]:(
+        (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x29)))))
 ;
 ?[x32]:(/* proper_q */
-  ?[x38]:(/* proper_q */
-    ?[n]:(name(n) & arg1(n)=x32 & arg2(n)="Mansion Dreadbury") &
-    (x38 = x32)) &
+  ?[n]:(name(n) & arg1(n)=x32 & arg2(n)="Mansion Dreadbury") &
   ?[x14]:(/* udef_q */
     ?[x24]:(/* proper_q */
       ?[n]:(name(n) & arg1(n)=x24 & arg2(n)="Charles") &
       ?[S]:(/* the_q */
-        S=^[s0]:(
+        S=^[s]:(
           butler_n_1(s0)) &
         size(S)=1 &
         ?[x19]:(
@@ -32,16 +26,15 @@
               x=x19 | x=x24))
         ))) &
     ?[S]:(/* the_q */
-      S=^[s0]:(
-        ) &
+      S=^[s]:(
+        ?[e53,e54,e51]:(
+          (therein_p_dir(e54) & arg1(e54)=e53) &
+          (live_v_1(e53) & arg1(e53)=s0) &
+          (people_n_of(s0) & arg1(s0)=i52) &
+          (only_a_1(e51) & arg1(e51)=s0))) &
       size(S)=1 &
       ?[x46]:(
         S(x46) & /* the_q BODY */
-        ?[e53,e54,e51]:(
-          (therein_p_dir(e54) & arg1(e54)=e53) &
-          (live_v_1(e53) & arg1(e53)=x46) &
-          (people_n_of(x46) & arg1(x46)=i52) &
-          (only_a_1(e51) & arg1(e51)=x46)) &
         ?[x3]:(/* udef_q */
           ?[x8]:(/* proper_q */
             ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
@@ -92,7 +85,7 @@
 ;
 ![x9]:(/* every_q */
   ?[S]:(/* the_q */
-    S=^[s0]:(
+    S=^[s]:(
       butler_n_1(s0)) &
     size(S)=1 &
     ?[x15]:(
@@ -107,16 +100,14 @@
       (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9))))
 ;
 ![x8]:(/* every_q */
-  ?[x19]:(/* proper_q */
-    ?[x25]:(/* proper_q */
-      ?[n]:(name(n) & arg1(n)=x25 & arg2(n)="Aunt Agatha") &
-      (x19 = x25)) &
-    ?[e16,e18]:(
-      (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x19) &
-      (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17))) &
+  ?[x25]:(/* proper_q */
+    ?[n]:(name(n) & arg1(n)=x25 & arg2(n)="Aunt Agatha")) &
+  ?[e16,e18]:(
+    (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x25) &
+    (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17)) &
   person(x8) &
   ?[S]:(/* the_q */
-    S=^[s0]:(
+    S=^[s]:(
       butler_n_1(s0)) &
     size(S)=1 &
     ?[x3]:(
@@ -136,7 +127,7 @@
         (hate_v_1(e26) & arg1(e26)=x14 & arg2(e26)=x8) &
         person(x8)))) &
   ?[S]:(/* the_q */
-    S=^[s0]:(
+    S=^[s]:(
       butler_n_1(s0)) &
     size(S)=1 &
     ?[x3]:(
@@ -153,7 +144,7 @@
       (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))
 ;
 ?[S]:(/* the_q */
-  S=^[s0]:(
+  S=^[s]:(
     butler_n_1(s0)) &
   size(S)=1 &
   ?[x10]:(
