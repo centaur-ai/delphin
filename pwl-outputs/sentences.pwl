@@ -1,13 +1,17 @@
-?[x29]:(/* proper_q */
-  ?[n]:(name(n) & arg1(n)=x29 & arg2(n)="Aunt Agatha") &
+?[x29]:(/* udef_q */
+  ?[i34]:(
+    (aunt_n_of(x29) & arg1(x29)=i34)) &
   ?[x10]:(/* proper_q */
     ?[n]:(name(n) & arg1(n)=x10 & arg2(n)="Mansion Dreadbury") &
-    ?[x3]:(/* some_q */
-      ?[e8,e9]:(
-        (in_p_loc(e9) & arg1(e9)=e8 & arg2(e9)=x10) &
-        (live_v_1(e8) & arg1(e8)=x3) &
-        person(x3)) &
-      (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x29))))
+    ?[x23]:(/* proper_q */
+      ?[n]:(name(n) & arg1(n)=x23 & arg2(n)="Agatha") &
+      (x29 = x23) /* compound */ &
+      ?[x3]:(/* some_q */
+        ?[e8,e9]:(
+          (in_p_loc(e9) & arg1(e9)=e8 & arg2(e9)=x10) &
+          (live_v_1(e8) & arg1(e8)=x3) &
+          person(x3)) &
+        (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x23)))))
 ;
 ?[x32]:(/* proper_q */
   ?[n]:(name(n) & arg1(n)=x32 & arg2(n)="Mansion Dreadbury") &
@@ -95,11 +99,15 @@
     (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x9)))
 ;
 ![x8]:(/* every_q */
-  ?[x25]:(/* proper_q */
-    ?[n]:(name(n) & arg1(n)=x25 & arg2(n)="Aunt Agatha")) &
-  ?[e16,e18,i17]:(
-    (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x25) &
-    (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17)) &
+  ?[x19]:(/* proper_q */
+    ?[x25]:(/* udef_q */
+      ?[i30]:(
+        (aunt_n_of(x25) & arg1(x25)=i30)) &
+      ?[n]:(name(n) & arg1(n)=x19 & arg2(n)="Agatha") &
+      (x25 = x19) /* compound */) &
+    ?[e16,e18,i17]:(
+      (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x19) &
+      (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17))) &
   person(x8) &
   ?[S]:(/* the_q */
     S=^[s]:(
@@ -145,12 +153,9 @@
       (be_v_id(e2) & arg1(e2)=x3 & arg2(e2)=x10))
   ))
 ;
-?[x13]:(/* proper_q */
-  ?[n]:(name(n) & arg1(n)=x13 & arg2(n)="Agatha") &
-  ?[i7,u5,e2]:(
-    therefore_a_1(i7) &
-    (unknown(e2) & arg1(e2)=u5)) &
-  ?[x20]:(/* pronoun_q */
-    pron(x20) &
-    (kill_v_1(e19) & arg1(e19)=x13 & arg2(e19)=x20)))
+?[x8]:(/* proper_q */
+  ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
+  ?[x3]:(/* which_q */
+    person(x3) &
+    (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)))
 ;
