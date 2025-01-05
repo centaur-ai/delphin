@@ -18,12 +18,13 @@ def solveAndFormat (sentenceNumber : Nat) (mrs : MRS) : IO (String × List Strin
     | none => unreachable!
   | Except.error _ => unreachable!
 
-def xform (sentenceNumber : Nat) (str : String) : IO (Nat × (String × List String × List Var)) := do
+def xform (sentenceNumber : Nat) (parseNumber : Nat) (str : String) : IO (Nat × (String × List String × List Var)) := do
   let (mrsList : List MRS) <- run_ace str
-  let ret <- match mrsList.head? with
-      | some firstMrs => (solveAndFormat sentenceNumber firstMrs)
-      | none => unreachable!
-  return (sentenceNumber,ret)
+  match mrsList.get? parseNumber with
+    | some selectedMrs => do
+      let ret <- solveAndFormat sentenceNumber selectedMrs
+      return (sentenceNumber, ret)
+    | none => unreachable!
 
 def mapWithIndexM [Monad m] (xs : List α) (f : Nat → α → m β) : m (List β) := do
   let rec loop : List α → Nat → m (List β)
@@ -54,10 +55,18 @@ def main : IO Unit := do
                       "The butler hates everyone Aunt Agatha hates.", -- 6
                       "No one hates everyone.", -- 7
                       "Agatha is not the butler.", -- 8
-                      "Therefore : Agatha killed herself." -- 9
+                      -- "Therefore : Agatha killed herself." -- 9
+                      "Who killed Agatha?" -- 9
                    ] 
 
- let (sentences : List (Nat × (String × (List String) × (List Var)))) <- mapWithIndexM sentencesText xform
+ let parseNumbers : List Nat := [1, 0, 0, 0, 0,  1, 0, 0, 0, 0]
+
+ -- let (sentences : List (Nat × (String × (List String) × (List Var)))) <- mapWithIndexM sentencesText xform
+
+ let (sentences : List (Nat × (String × (List String) × (List Var)))) <- 
+   mapWithIndexM sentencesText (fun idx str => 
+     let parseNumber := parseNumbers.get? idx |>.getD 0
+     xform idx parseNumber str)
  
  -- Collect event variables
  let (eSet : List (Nat × Var)) := sentences.foldl (fun acc tup => 
