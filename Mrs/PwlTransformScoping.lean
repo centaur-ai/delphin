@@ -15,7 +15,6 @@ open HOF (lastTwoChars)
 open InsertionSort
 open BEq
 open PWL.Transform.ScopingCore (shouldEliminateHandle isSimpleNamed)
-open Lean (HashMap)
 
 def normalizePredicate (p : String) : String :=
   if p.startsWith "_" then p.drop 1 else p
@@ -47,8 +46,11 @@ def collectScopeEvents (preds: List EP) : List Var :=
 
 def processQuantifierEvents (rstrPreds : List EP) (bodyPreds : List EP) : 
     (List Var × List Var × List Var) :=
+  dbg_trace s!"QUANT_EVENTS: Processing RSTR({rstrPreds.map (·.predicate)}) BODY({bodyPreds.map (·.predicate)})"
   let rstrEvents := collectScopeEvents rstrPreds
   let bodyEvents := collectScopeEvents bodyPreds
+  
+  dbg_trace s!"QUANT_EVENTS: Initial events RSTR={rstrEvents} BODY={bodyEvents}"
   
   -- Find events used in both scopes
   let sharedEvents := rstrEvents.filter (fun ev => bodyEvents.contains ev)
@@ -57,191 +59,158 @@ def processQuantifierEvents (rstrPreds : List EP) (bodyPreds : List EP) :
   let rstrOnlyEvents := rstrEvents.filter (fun ev => !(bodyEvents.contains ev))
   let bodyOnlyEvents := bodyEvents.filter (fun ev => !(rstrEvents.contains ev))
   
+  dbg_trace s!"QUANT_EVENTS: Final shared={sharedEvents} rstrOnly={rstrOnlyEvents} bodyOnly={bodyOnlyEvents}"
   (sharedEvents, rstrOnlyEvents, bodyOnlyEvents)
 
 def buildQuantifierFormula (quantType : String) (arg0 : Var) (rstrFormula : Formula) 
     (bodyFormula : Formula) (sharedEvents : List Var) (rstrEvents : List Var) 
     (bodyEvents : List Var) : Formula :=
-  -- Build inner parts first with local scoping
-  let scopedRstr := if rstrEvents.isEmpty then 
+  dbg_trace s!"BUILD_QUANT: {quantType} starting with RSTR events={rstrEvents} BODY events={bodyEvents}"
+
+  -- Add event scoping for both the_q and non-the_q cases
+  let scopedRstr := if rstrEvents.isEmpty then
     rstrFormula
   else
     Formula.scope rstrEvents none rstrFormula
 
+  -- For both the_q and non-the_q, add body event scoping
   let scopedBody := if bodyEvents.isEmpty then
     bodyFormula
-  else  
+  else
     Formula.scope bodyEvents none bodyFormula
 
-  -- Then build quantifier with shared event scope
-  let guardedRstr := Formula.scope [] (some "rstr_guard") scopedRstr
-  let guardedBody := Formula.scope [] (some "body_guard") scopedBody
-  let inner := Formula.conj [guardedRstr, guardedBody]
+  dbg_trace s!"BUILD_QUANT: scopedRstr={scopedRstr}"
+  dbg_trace s!"BUILD_QUANT: scopedBody={scopedBody}"
 
-  if sharedEvents.isEmpty then
+  -- Build inner formula based on quantifier type
+  let inner := if quantType == "the_q" then
+    -- Use guard structure for the_q
+    let guardedRstr := Formula.scope rstrEvents (some "rstr_guard") scopedRstr
+    let guardedBody := Formula.scope bodyEvents (some "body_guard") scopedBody
+    Formula.conj [guardedRstr, guardedBody]
+  else
+    -- Regular conjunction for other quantifiers, events already scoped above
+    Formula.conj [scopedRstr, scopedBody]
+
+  dbg_trace s!"BUILD_QUANT: inner={inner}"
+
+  let result := if sharedEvents.isEmpty then
     Formula.scope [arg0] (some quantType) inner
   else
     Formula.scope sharedEvents none $
       Formula.scope [arg0] (some quantType) inner
+      
+  dbg_trace s!"BUILD_QUANT: Final result={result}"
+  result
 
 mutual
 
 partial def processPredicates (parent : Var) (eps : List EP) (seenHandles : List Var) 
-    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) (inQuant : Bool := false) : (Option Formula × Stats) :=
-  dbg_trace s!"RECURSE: processPredicates parent={parent} eps={eps.map (fun p => (p.predicate, p.label))}"
+    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) 
+    (scopedVars : List Var := []) (inQuant : Bool := false) : (Option Formula × Stats) :=
+  dbg_trace s!"PREDICATES: Processing {eps.length} preds under parent={parent} inQuant={inQuant}"
+  dbg_trace s!"PREDICATES: Preds are {eps.map (fun p => (p.predicate, p.label))}"
   match eps with
   | [] => (some (Formula.conj []), stats)
   | [ep] => 
-    match processEP parent ep seenHandles hm stats ev with
+    dbg_trace s!"PRED_SINGLE: Processing {ep.predicate} inQuant={inQuant}"
+    let epEvents := ep.rargs.filter (fun arg => arg.2.sort == 'e') |>.map (·.2)
+    dbg_trace s!"PRED_SINGLE: Has events {epEvents}"
+    match processEP parent ep seenHandles hm stats ev scopedVars inQuant with
     | (some formula, stats1) =>
-      -- Only collect events when not in a quantifier
+      dbg_trace s!"PRED_SINGLE: Got formula result={formula}"
       if inQuant then
-        (some formula, stats1)
+        if epEvents.isEmpty then
+          (some formula, stats1)
+        else
+          (some formula, stats1)
       else
-        let events := collectScopeEvents [ep]
-        let result := if events.isEmpty then formula 
-          else Formula.scope events none formula
-        (some result, stats1)
+        (some formula, stats1)
     | (none, stats1) => (none, stats1)
   | eps => 
-    match processEPs parent eps seenHandles hm stats ev with
+    match processEPs parent eps seenHandles hm stats ev scopedVars inQuant with
     | (formulas, finalStats) =>
       match formulas with
       | [] => (some (Formula.conj []), finalStats)
-      | [f] => 
-        if inQuant then
-          (some f, finalStats)
-        else
-          let events := collectScopeEvents eps
-          let result := if events.isEmpty then f
-            else Formula.scope events none f
-          (some result, finalStats)
+      | [f] => (some f, finalStats)  
       | fs => 
         let filtered := fs.filter (fun f => !f.isEmptyConj)
-        if inQuant then
-          (some (Formula.conj filtered), finalStats)
-        else
-          -- Scope any event variables used at this level
-          let events := collectScopeEvents eps
-          let formula := Formula.conj filtered
-          let result := if events.isEmpty then formula
-            else Formula.scope events none formula
-          (some result, finalStats)
+        let formula := Formula.conj filtered
+        dbg_trace s!"PREDICATES: Multiple preds with events raw formula={formula}"
+        (some formula, finalStats)
 
 partial def processEPs (parent : Var) (eps : List EP) (seenHandles : List Var)
-    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (List Formula × Stats) :=
+    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars)
+    (scopedVars : List Var := []) (inQuant : Bool := false) : (List Formula × Stats) :=
   eps.foldl (fun (acc, stats) ep =>
-    match processEP parent ep seenHandles hm stats ev with
+    match processEP parent ep seenHandles hm stats ev scopedVars inQuant with
     | (some formula, newStats) => 
       let newAcc := if formula.isEmptyConj then acc else acc ++ [formula]
       (newAcc, newStats)
     | (none, newStats) => (acc, newStats)) ([], stats)
 
 partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
-    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) : (Option Formula × Stats) :=
-  dbg_trace s!"RECURSE: processEP parent={parent} ep={ep.predicate}({ep.label})"
-  
+    (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) 
+    (scopedVars : List Var := []) (inQuant : Bool := false) : (Option Formula × Stats) :=
   if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
+    dbg_trace s!"PROCESS_EP: Skipping {ep.label} - already seen or eliminated"
     (none, stats)
   else
     let newSeen := ep.label :: seenHandles
     let normalized := normalizePredicate ep.predicate
+    dbg_trace s!"PROCESS_EP: {normalized} with label {ep.label} parent={parent}"
     
     match normalized with
-    | "neg" | "never_a_1" =>
-      match ep.rargs.find? (fun arg => arg.1 == "ARG1"), ep.rargs.find? (fun arg => arg.1 == "ARG0") with
-      | some (_, handle), some (_, evar) =>
-        let innerPreds := hm.find? handle |>.getD []
-        let isEvarReferenced := isEventReferenced evar innerPreds
-        match processPredicates ep.label innerPreds newSeen hm stats ev true with
-        | (none, stats1) => (none, stats1)
-        | (some inner, stats1) =>
-          let negFormula := if isEvarReferenced then
-            Formula.scope [evar] (some ep.predicate) inner
-          else
-            inner
-          (some negFormula, addStat stats1 2)
-      | _, _ => (none, stats)
-    
-    | "therefore_a_1" =>
-      -- Get the handle argument
-      match ep.rargs.find? (fun arg => arg.1 == "ARG1") with
-      | none => (some (Formula.atom ep), stats)
-      | some (_, handle) =>
-        match hm.find? handle with
-        | none => (none, stats)
-        | some preds =>
-          -- Get content of handle
-          match preds.head? with
-          | none => (none, stats)
-          | some handleEP =>
-            -- Extract implicit variables, unknown variables, and event variables
-            let implicitVars := ep.rargs.filter (fun arg => arg.2.sort == 'i') |>.map (·.2)
-            let unknownVars := handleEP.rargs.filter (fun arg => arg.2.sort == 'u') |>.map (·.2)
-            let eventVars := handleEP.rargs.filter (fun arg => arg.2.sort == 'e') |>.map (·.2)
-            -- Build formula combining therefore_a_1 (without handle ref) with expanded handle content
-            let cleanedEP := { ep with rargs := ep.rargs.filter (fun arg => arg.2.sort != 'h') }
-            let baseFormula := Formula.atom cleanedEP
-            let handleFormula := Formula.atom handleEP
-            let combined := Formula.conj [baseFormula, handleFormula]
-            -- Scope all collected variables
-            let allVars := (implicitVars ++ unknownVars ++ eventVars).eraseDups
-            let scopedFormula := if allVars.isEmpty then combined
-                                else Formula.scope allVars none combined
-            (some scopedFormula, stats)
-    
-    | "colon_p_namely" =>
-      match ep.rargs.find? (fun arg => arg.1 == "ARG0"), 
-            ep.rargs.find? (fun arg => arg.1 == "ARG1"), 
-            ep.rargs.find? (fun arg => arg.1 == "ARG2") with
-      | some (_, evar), some (_, handle1), some (_, handle2) =>
-        let preds1 := hm.find? handle1 |>.getD []
-        let preds2 := hm.find? handle2 |>.getD []
-        let isEvarReferenced := isEventReferenced evar (preds1 ++ preds2)
-        match processPredicates handle1 preds1 newSeen hm stats ev true,
-              processPredicates handle2 preds2 newSeen hm stats ev true with
-        | (some part1, stats1), (some part2, stats2) =>
-          let conj := Formula.conj [part1, part2]
-          let colonFormula := if isEvarReferenced then
-            Formula.scope [evar] (some ep.predicate) conj
-          else
-            conj
-          (some colonFormula, addStat stats2 4)
-        | _, _ => (none, stats)
-      | _, _, _ => (none, stats)
-
     | p =>
-      if p == "the_q" || lastTwoChars p == "_q" then
+      if lastTwoChars p == "_q" then
         match getOrderedQuantArgs ep.rargs with
         | none => (none, stats)
         | some (arg0, rstr, body) =>
+          dbg_trace s!"QUANT: Processing {p} ARG0={arg0} RSTR={rstr} BODY={body}"
           let rstrPreds := hm.find? rstr |>.getD []
           let bodyPreds := hm.find? body |>.getD []
+          dbg_trace s!"QUANT: RSTR preds={rstrPreds.map (·.predicate)} BODY preds={bodyPreds.map (·.predicate)}"
           
-          match processPredicates ep.label rstrPreds newSeen hm stats ev true,
-                processPredicates ep.label bodyPreds newSeen hm stats ev true with
+          match processPredicates ep.label rstrPreds newSeen hm stats ev scopedVars true,
+                processPredicates ep.label bodyPreds newSeen hm stats ev scopedVars true with
           | (some rstrFormula, stats1), (some bodyFormula, stats2) =>
-            let (sharedEvents, rstrEvents, bodyEvents) := 
-              processQuantifierEvents rstrPreds bodyPreds
+            dbg_trace s!"QUANT: Got formulas RSTR={rstrFormula} BODY={bodyFormula}"
+            -- Always collect guard events when in a quantifier
+            let rstrEvents := rstrPreds.foldl (fun acc p => 
+              acc ++ (p.rargs.filter (fun a => 
+                (a.2.sort == 'e' || a.2.sort == 'i') && !(scopedVars.contains a.2)) |>.map (·.2))) [] |>.eraseDups
+            let bodyEvents := bodyPreds.foldl (fun acc p => 
+              acc ++ (p.rargs.filter (fun a => 
+                (a.2.sort == 'e' || a.2.sort == 'i') && !(scopedVars.contains a.2)) |>.map (·.2))) [] |>.eraseDups
+            
+            dbg_trace s!"QUANT: Events RSTR={rstrEvents} BODY={bodyEvents}"
 
-            -- Skip RSTR guard if there were no RSTR predicates
-            let noRstr := rstrPreds.isEmpty && !isHandleReferenced rstr bodyPreds
-              
-            let formula := if noRstr then
-              -- Just wrap the body formula in the quantifier 
-              if sharedEvents.isEmpty then
-                Formula.scope [arg0] (some p) bodyFormula
-              else
-                Formula.scope sharedEvents none $
-                  Formula.scope [arg0] (some p) bodyFormula
-            else
-              buildQuantifierFormula p arg0 rstrFormula bodyFormula 
-                sharedEvents rstrEvents bodyEvents
-
+            -- Always create guard scopes for the_q
+            let rstrGuarded := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
+            let bodyGuarded := Formula.scope bodyEvents (some "body_guard") bodyFormula
+            let formula := Formula.scope [arg0] (some p) (Formula.conj [rstrGuarded, bodyGuarded])
+            
+            dbg_trace s!"QUANT: Final formula={formula}"
             (some formula, addStat stats2 3)
           | _, _ => (none, stats)
       else 
-        (some (Formula.atom ep), stats)
+        -- Not a quantifier - handle normal predicates
+        match ep.predicate with
+        | "rstr_guard" | "body_guard" =>
+          let localScopeVars := ep.rargs.filter (fun arg => 
+            isEventOrImplicit arg.2 && !(scopedVars.contains arg.2)) |>.map (·.2)
+          match localScopeVars with 
+          | [] => (some (Formula.atom ep), stats)
+          | newScopedVars => (some (Formula.scope newScopedVars none (Formula.atom ep)), stats)
+        | _ =>
+          if inQuant then 
+            (some (Formula.atom ep), stats)
+          else
+            let localScopeVars := ep.rargs.filter (fun arg => 
+              isEventOrImplicit arg.2 && !(scopedVars.contains arg.2)) |>.map (·.2)
+            match localScopeVars with 
+            | [] => (some (Formula.atom ep), stats)
+            | newScopedVars => (some (Formula.scope newScopedVars none (Formula.atom ep)), stats)
 
 end
 

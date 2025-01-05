@@ -63,7 +63,6 @@ def substituteVarList (st : SubstMap) (vars : List Var) : List Var :=
   vars.map (fun v => st.substitute v)
 
 partial def cleanConjunction (fs : List Formula) : Formula :=
-  -- First recursively flatten any nested conjunctions
   let rec flatten (f : Formula) : List Formula := 
     match f with
     | Formula.conj nested => nested.foldl (fun acc f => acc ++ flatten f) []
@@ -71,14 +70,12 @@ partial def cleanConjunction (fs : List Formula) : Formula :=
   
   let flattened := fs.foldl (fun acc f => acc ++ flatten f) []
   
-  -- Then filter out empty conjuncts and null formulas
   let nonEmpty := flattened.filter fun f => match f with
     | Formula.conj [] => false
     | Formula.conj [Formula.conj []] => false
     | Formula.conj fs => !fs.all (·.isEmptyConj)
     | _ => !f.isEmptyConj
 
-  -- Remove any duplicate conjuncts and normalize
   let deduped := nonEmpty.foldl (fun acc f =>
     if acc.any (fun existing => existing == f) then acc
     else acc ++ [f]) []
@@ -86,7 +83,7 @@ partial def cleanConjunction (fs : List Formula) : Formula :=
   dbg_trace s!"CLEAN: flattened {fs.length} → {flattened.length} → {deduped.length} conjuncts"
   match deduped with
   | [] => Formula.conj []
-  | [single] => single -- Unwrap single formulas
+  | [single] => single
   | multiple => Formula.conj multiple
 
 def cleanFormula (f : Formula) : Formula :=
@@ -140,18 +137,9 @@ mutual
         let guardState := st.enterGuard GuardType.RstrGuard
         let (newInner, innerState) := collectFormula inner guardState
         let exitState := innerState.exitGuard
-        match newInner with
-        | Formula.conj [] => 
-          (Formula.conj [], exitState)
-        | Formula.conj [single] =>
-          -- Preserve single formulas in RSTR guards
-          let result := Formula.scope vars quant single
-          dbg_trace s!"RSTR_GUARD[{vars}] = {result}"
-          (result, exitState)
-        | _ =>
-          let result := Formula.scope vars quant newInner
-          dbg_trace s!"RSTR_GUARD[{vars}] = {result}"
-          (result, exitState)
+        let result := Formula.scope vars quant newInner
+        dbg_trace s!"RSTR_GUARD[{vars}] = {result}"
+        (result, exitState)
 
       | some "body_guard" =>
         dbg_trace s!"BODY_GUARD[{vars}] start"
@@ -180,10 +168,6 @@ mutual
         else if newInner.isEmptyConj then 
           dbg_trace s!"SCOPE: Remove {quant}[{vars}] - empty inner"
           (Formula.conj [], finalState)
-        else if st.currentGuard == some GuardType.RstrGuard then
-          -- Keep scopes within RSTR guards
-          let result := Formula.scope vars quant newInner
-          (result, finalState)
         else
           let result := Formula.scope vars quant newInner
           dbg_trace s!"SCOPE: End {quant}[{vars}]"

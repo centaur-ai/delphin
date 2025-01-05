@@ -10,58 +10,39 @@ namespace PWL.Transform.Serialize
 
 open MRS (Var EP)
 open HOF (lastTwoChars)
-open Format (makeIndent)
 open PWL.Transform
 
-partial def substituteInFormula (f : Formula) (x : Var) (s : String) : Formula :=
-  match f with
-  | Formula.atom ep => 
-    let newArgs := ep.rargs.map fun (name, var) =>
-      if var == x then (name, {var with id := 0, sort := 's'}) else (name, var)
-    Formula.atom { ep with rargs := newArgs }
-  | Formula.conj fs => Formula.conj (fs.map (fun f => substituteInFormula f x s))
-  | Formula.scope vars quant inner => Formula.scope vars quant (substituteInFormula inner x s)
+mutual 
+  partial def substituteInFormula (f : Formula) (x : Var) (s : String) : Formula :=
+    match f with
+    | Formula.atom ep => 
+      let newArgs := ep.rargs.map fun (name, var) =>
+        if var == x then (name, {var with id := 0, sort := 's'}) else (name, var)
+      Formula.atom { ep with rargs := newArgs }
+    | Formula.conj fs => Formula.conj (fs.map (fun f => substituteInFormula f x s))
+    | Formula.scope vars quant inner => Formula.scope vars quant (substituteInFormula inner x s)
 
-partial def extractFromGuard (f : Formula) : (List Formula × List Formula) :=
-  dbg_trace s!"THE_Q_SERIALIZE: examining formula {match f with
-    | Formula.conj fs => s!"conj({fs.length})"
-    | Formula.scope vs q _ => s!"scope(vars={vs}, quant={q})" 
-    | Formula.atom ep => s!"atom({ep.predicate})"}"
+  partial def extractFromGuard (f : Formula) : (List Formula × List Formula) :=
+    dbg_trace s!"THE_Q_SERIALIZE: examining formula {match f with
+      | Formula.conj fs => s!"conj({fs.length})"
+      | Formula.scope vs q _ => s!"scope(vars={vs}, quant={q})" 
+      | Formula.atom ep => s!"atom({ep.predicate})"}"
 
-  match f with
-  | Formula.conj fs =>
-    let (rstrGuards, nonRstr) := fs.partition fun f => match f with
-      | Formula.scope [] (some "rstr_guard") _ => true
-      | _ => false 
-    
-    match rstrGuards with
-    | [] => ([], fs)
-    | guards =>
-      -- Extract from all RSTR guard scopes and collect their content
-      let rstrContents := guards.foldl (fun acc guardScope =>
-        match guardScope with
-        | Formula.scope _ _ inner => 
-          match inner with
-          | Formula.scope vs quant innerScope => 
-            -- Handle nested scopes inside RSTR guards 
-            let (nestedRstr, _) := extractFromGuard innerScope
-            acc ++ nestedRstr ++ [Formula.scope vs quant innerScope]
-          | Formula.conj innerFs => acc ++ innerFs
-          | Formula.atom ep => acc ++ [Formula.atom ep]
-        | _ => acc
-      ) []
-      dbg_trace s!"THE_Q_SERIALIZE: extracted from RSTR: {rstrContents.length} formulas"
-      (rstrContents, nonRstr)
+    match f with
+    | Formula.conj fs =>
+      let (rstrGuards, bodyFormulas) := fs.partition fun f => match f with
+        | Formula.scope _ (some "rstr_guard") _ => true
+        | _ => false 
+      
+      match rstrGuards with
+      | [] => ([], fs)
+      | guards => (guards, bodyFormulas)  -- Preserve complete guard formulas
 
-  | Formula.scope [] (some "rstr_guard") inner =>
-    match inner with 
-    | Formula.scope vs2 quant innerScope =>
-      -- Keep nested scopes within RSTR
-      ([Formula.scope vs2 quant innerScope], [])
-    | Formula.conj fs => (fs, [])
-    | Formula.atom ep => ([Formula.atom ep], [])
+    | Formula.scope [] (some "rstr_guard") inner =>
+      ([Formula.scope [] (some "rstr_guard") inner], [])
 
-  | other => ([], [other])
+    | other => ([], [other])
+end
 
 def formatTheQ (vars : List Var) (inner : Formula) (ind : Nat) 
     (formatFn : Formula → Option Var → Nat → Bool → Bool → String) : String :=
