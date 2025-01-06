@@ -111,8 +111,10 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
       ) ("", 1)
       s!"{normalized}({firstArg.2}) & {argStr.1}")
     
-    dbg_trace s!"FORMAT_PRED: pre-indent formatted='{formatted}'"
-    let needsParens := !inNegation && !pred.endsWith "_q"
+    dbg_trace s!"FORMAT_PRED: pre-paren formatted='{formatted}'"
+    let needsParens := match pred with
+    | "=" => false  
+    | p => !p.endsWith "_q" && args.length > 1
     let result := if needsParens then s!"{indentStr}({formatted})" else s!"{indentStr}{formatted}"
     dbg_trace s!"FORMAT_PRED: final result='{result}'"
     result
