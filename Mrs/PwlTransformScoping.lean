@@ -159,7 +159,7 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
     let normalized := normalizePredicate ep.predicate
     
     match normalized with
-    | "neg" => 
+    | "neg" | "never_a_1" => 
       match ep.rargs.find? (fun p => p.1 == "ARG1") with 
       | none => (none, stats)
       | some (_, handle) =>
@@ -168,7 +168,9 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
         | some preds =>
           match processPredicates handle preds newSeen hm stats ev scopedVars true with
           | (some inner, stats1) => 
-            (some (Formula.scope [] (some "neg") inner), stats1)
+            -- Use appropriate scope label based on predicate
+            let scopeLabel := if normalized == "never_a_1" then "never_a_1" else "neg"
+            (some (Formula.scope [] (some scopeLabel) inner), stats1)
           | (none, stats1) => (none, stats1)
 
     | "colon_p_namely" =>
@@ -205,11 +207,7 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
                 (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2))) [] |>.eraseDups
 
             let guardedRstr := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
-            let guardedBody := if p == "no_q" then
-                -- For no_q, add negation to body
-                Formula.scope bodyEvents (some "body_guard") (Formula.scope [] (some "neg") bodyFormula)
-              else
-                Formula.scope bodyEvents (some "body_guard") bodyFormula
+            let guardedBody := Formula.scope bodyEvents (some "body_guard") bodyFormula
             
             let formula := Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])
             (some formula, addStat stats2 3)
@@ -217,8 +215,10 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
       
       else 
         if inGuard then
+          -- Already in a guard, just return the predicate
           (some (Formula.atom ep), stats)
         else
+          -- Not in a guard, ensure events are scoped
           let eventVars := ep.rargs.filter (fun arg => 
             (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2)
           match eventVars with
