@@ -68,7 +68,7 @@ def formatTheQ (vars : List Var) (inner : Formula) (ind : Nat)
     | _ => formatFn (Formula.conj bodyPreds) none (ind + 4) false false
 
     s!"{baseIndent}?[S]:(/* the_q */\n" ++
-    s!"{contentIndent}S=^[s]:(\n" ++
+    s!"{contentIndent}S=^[s0]:(\n" ++
     s!"{contentIndent}  {rstrStr}) &\n" ++
     s!"{contentIndent}size(S)=1 &\n" ++
     s!"{contentIndent}?[{x}]:(\n" ++
