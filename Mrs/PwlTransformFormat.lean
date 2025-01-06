@@ -91,13 +91,11 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
       | some comment => s!"{indentStr}({var1} = {var2}) {comment}"
       | none => s!"{indentStr}({var1} = {var2})"
     | _ => s!"{indentStr}=" 
-  else if pred == "neg" || pred == "_neg" then
-    -- Expand neg predicate using processArgs
-    let argInfo := processArgs args
-    match argInfo with
-    | { firstArg := some firstArg, otherArgs := rest } =>
-      s!"{indentStr}(neg({firstArg.2}) & arg1({firstArg.2})={rest.head!.2})"
-    | _ => s!"{indentStr}neg({args})"  -- Fallback but shouldn't happen
+  else if pred == "named" || pred == "_named" then
+    match args.find? (fun p => p.1 == "ARG0"), carg with
+    | some (_, var), some str => 
+      s!"{indentStr}?[n]:(name(n) & arg1(n)={var} & arg2(n)={str})"
+    | _, _ => s!"{indentStr}named({args})"  -- Fallback case
   else
     -- Original formatting logic for other predicates
     let argInfo := processArgs args
@@ -120,7 +118,7 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
         s!"({normalized}({firstArg.2}) & {argStr.1})"
 
     if inNegation then
-      s!"{indentStr}~{formatted}"
+      formatted
     else
       s!"{indentStr}{formatted}"
 

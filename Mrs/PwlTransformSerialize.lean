@@ -28,6 +28,7 @@ def debugNested (f : Formula) : String :=
 
 partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) : String :=
   let indentStr := if skipInitialIndent then "" else makeIndent ind
+  dbg_trace s!"formatAsPWL called with ind={ind} skipInitial={skipInitialIndent} formula={f}"
 
   match f with 
   | Formula.atom ep =>
@@ -56,7 +57,7 @@ partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : 
     let normalized := normalizePredicate q
     dbg_trace s!"Serializing scope with quantifier: {q} (normalized: {normalized})"
     if (normalized == "neg" || normalized == "never_a_1") && vars.isEmpty then
-      s!"{indentStr}~{formatAsPWL inner bv ind false true}"  
+      s!"{indentStr}~{formatAsPWL inner bv 0 false true}"
     else
       match normalized with
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip)
