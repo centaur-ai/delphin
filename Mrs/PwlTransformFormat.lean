@@ -37,41 +37,17 @@ def normalizePredicate (p : String) : String :=
 def makeIndent (n : Nat) : String :=
   String.mk (List.replicate n ' ')
 
-def formatSinglePredicate (pred : String) (args : List (String × Var)) (indent : String) 
-    (carg : Option String) (isAtomWithRest : Bool := false) : String :=
-  dbg_trace s!"FORMAT_SINGLE: pred={pred} args={args} carg={carg} isAtomWithRest={isAtomWithRest}"
-  (if pred == "=" then
-    (match args with
-    | [(_, var1), (_, var2)] => 
-      (match carg with
-      | some comment => s!"{indent}({var1} = {var2}) {comment}"
-      | none => s!"{indent}({var1} = {var2})")
-    | _ => indent ++ "=")
+def processAlways (args : List (String × Var)) : List (String × Var) :=
+  -- Only reorder if we find exactly one event var and one implicit var
+  let evars := args.filter (fun p => p.2.sort == 'e')
+  let ivars := args.filter (fun p => p.2.sort == 'i')
+  
+  if evars.length == 1 && ivars.length == 1 then
+    -- Found exactly one of each, do the reordering
+    [evars.head!, ivars.head!]
   else
-    let argInfo := processArgs args
-    let normalized := normalizePredicate pred
-    let formatted := (match argInfo with
-    | { firstArg := none, otherArgs := [] } => normalized
-    | { firstArg := some firstArg, otherArgs := [] } => 
-        dbg_trace s!"FORMAT_SINGLE: single arg case first={firstArg}"
-        s!"{normalized}({firstArg.2})"
-    | { firstArg := none, otherArgs := rest } => s!"{normalized}({rest.head!.2})"
-    | { firstArg := some firstArg, otherArgs := rest } =>
-      dbg_trace s!"FORMAT_SINGLE: multi-arg case first={firstArg} rest={rest}"
-      let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
-        let argNum := acc.2
-        let str := if acc.1.isEmpty
-          then s!"arg{argNum}({firstArg.2})={pair.2}"
-          else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
-        (str, argNum + 1)
-      ) ("", 1)
-      s!"({normalized}({firstArg.2}) & {argStr.1})")
-    
-    dbg_trace s!"FORMAT_SINGLE: pre-paren formatted='{formatted}'"
-    let needsParens := isAtomWithRest && !pred.endsWith "_q"
-    let result := if needsParens then s!"{indent}({formatted})" else s!"{indent}{formatted}"
-    dbg_trace s!"FORMAT_SINGLE: final result='{result}'"
-    result)
+    -- Any other combination of variables, leave as is
+    args
 
 def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option String) 
     (indent : Nat) (inNegation : Bool) (skipInitialIndent : Bool := false) : String :=
@@ -91,32 +67,56 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
       | none => s!"{indentStr}({var1} = {var2})"
     | _ => s!"{indentStr}="
   else 
-    let argInfo := processArgs args
-    let normalized := normalizePredicate pred
-    dbg_trace s!"FORMAT_PRED: normalized={normalized} argInfo={argInfo}"
-    let formatted := (match argInfo with
-    | { firstArg := none, otherArgs := [] } => normalized
-    | { firstArg := some firstArg, otherArgs := [] } => 
-        dbg_trace s!"FORMAT_PRED: single arg case first={firstArg}"
-        s!"{normalized}({firstArg.2})"
-    | { firstArg := none, otherArgs := rest } => s!"{normalized}({rest.head!.2})"
-    | { firstArg := some firstArg, otherArgs := rest } =>
-      dbg_trace s!"FORMAT_PRED: multi-arg case first={firstArg} rest={rest}"
-      let argStr := rest.foldl (fun (acc : String × Nat) (pair : String × Var) =>
-        let argNum := acc.2
-        let str := if acc.1.isEmpty
-          then s!"arg{argNum}({firstArg.2})={pair.2}"
-          else acc.1 ++ " & " ++ s!"arg{argNum}({firstArg.2})={pair.2}"
-        (str, argNum + 1)
-      ) ("", 1)
-      s!"{normalized}({firstArg.2}) & {argStr.1}")
+    let finalArgs := if pred == "always_a_1" || pred == "_always_a_1" then
+                      processAlways args
+                    else args
     
-    dbg_trace s!"FORMAT_PRED: pre-paren formatted='{formatted}'"
+    let formatted := 
+      if pred == "always_a_1" || pred == "_always_a_1" then
+        match finalArgs with
+        | [(_, e), (_, i)] => 
+          if e.sort == 'e' && i.sort == 'i' then
+            -- Only use special formatting if types match
+            s!"{pred}({e}) & arg1({e})={i}"
+          else
+            -- Otherwise fall back to standard formatting
+            let argInfo := processArgs finalArgs
+            let normalized := normalizePredicate pred
+            match argInfo with
+            | { firstArg := some firstArg, otherArgs := rest } =>
+              let argStr := rest.foldl (fun (acc : String × Nat) (p : String × Var) =>
+                let argNum := acc.snd
+                let str := if acc.fst.isEmpty
+                  then s!"arg{argNum}({firstArg.2})={p.snd}"
+                  else acc.fst ++ " & " ++ s!"arg{argNum}({firstArg.2})={p.snd}"
+                (str, argNum + 1)
+              ) ("", 1)
+              s!"{normalized}({firstArg.2}) & {argStr.fst}"
+            | _ => s!"{normalized}"
+        | _ => s!"{pred}"
+      else
+        let argInfo := processArgs finalArgs
+        let normalized := normalizePredicate pred
+        dbg_trace s!"FORMAT_PRED: normalized={normalized} argInfo={argInfo} finalArgs={finalArgs}"
+        match argInfo with
+        | { firstArg := none, otherArgs := [] } => normalized
+        | { firstArg := some firstArg, otherArgs := [] } => 
+            s!"{normalized}({firstArg.2})"
+        | { firstArg := none, otherArgs := rest } => s!"{normalized}({rest.head!.2})"
+        | { firstArg := some firstArg, otherArgs := rest } =>
+          let argStr := rest.foldl (fun (acc : String × Nat) (p : String × Var) =>
+            let argNum := acc.snd
+            let str := if acc.fst.isEmpty
+              then s!"arg{argNum}({firstArg.2})={p.snd}"
+              else acc.fst ++ " & " ++ s!"arg{argNum}({firstArg.2})={p.snd}"
+            (str, argNum + 1)
+          ) ("", 1)
+          s!"{normalized}({firstArg.2}) & {argStr.fst}"
+    
     let needsParens := match pred with
     | "=" => false  
     | p => !p.endsWith "_q" && args.length > 1
     let result := if needsParens then s!"{indentStr}({formatted})" else s!"{indentStr}{formatted}"
-    dbg_trace s!"FORMAT_PRED: final result='{result}'"
     result
 
 def getConjComment (pred : String) : String :=
@@ -155,6 +155,5 @@ export PWL.Transform.Format (
   varList_toString
   normalizePredicate 
   makeIndent
-  formatSinglePredicate
   formatPredArgs
   formatConjunction)
