@@ -6,6 +6,7 @@ import Mrs.PwlTransformSerialize
 import Mrs.PwlTransformNegationScopeRemoval
 import Mrs.PwlTransformEqualityRemoval
 import Mrs.PwlTransformCompoundRemoval
+import Mrs.PwlTransformLambdaTracking 
 import Mrs.Hof
 import Util.InsertionSort
 
@@ -188,14 +189,17 @@ def phase3_1_with_debug (f : Formula) : Formula :=
 
 def phase3_2 := PWL.Transform.CompoundRemoval.simplifyCompounds
 
-def phase4 (f : Formula) : String :=
-  dbg_trace "Phase 4 - Serializing to PWL format"
-  formatAsPWL f none
+def phase3_3 : Formula → (Formula × Lean.RBTree Var compare) :=
+  PWL.Transform.LambdaTracking.simplifyLambdas
+
+def phase4 (f : Formula) (lambdaVars : Lean.RBTree Var compare) : String :=
+  formatAsPWL f lambdaVars none
 
 def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :=
   dbg_trace s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
 
-  let filteredPreds := phase0 preds
+  -- let filteredPreds := phase0 preds
+  let filteredPreds := preds
   dbg_trace s!"POST_PHASE0: After phase0 filtered predicates: {filteredPreds.map (fun p => (p.predicate, p.label))}"
   
   let dm := computeDepthMap handle hm
@@ -220,7 +224,9 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       dbg_trace s!"POST_PHASE3.1: Equality simplified: {equalitySimplified}"
       let compoundSimplified := phase3_2 equalitySimplified 
       dbg_trace s!"POST_PHASE3.2: Compound simplified: {compoundSimplified}"
-      let result := phase4 compoundSimplified
+      let (preFormat, lambdaVars) := phase3_3 compoundSimplified
+      dbg_trace s!"POST_PHASE3.3: Lambda variables collected: {lambdaVars.fold (init := []) fun xs x => x :: xs}"
+      let result := phase4 preFormat lambdaVars
       dbg_trace s!"Final result: {result}"
       result
 

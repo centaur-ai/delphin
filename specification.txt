@@ -194,6 +194,21 @@ Phase 3.2 transforms compound predicates into equality statements:
    - Remove the e variable scope if no other references exist
 2. Pass through all other predicates unchanged
 
+### Phase 3.3
+Phase 3.3 identifies and tracks lambda variables from and_c/implicit_conj expressions:
+1. For each and_c or implicit_conj predicate, collects the ARG0 variable as a lambda variable 
+2. These variables will need special handling in phase4 serialization when referenced in later and_c/implicit_conj expressions
+3. Pass the set of lambda variables to phase4 for serialization
+
+For example:
+x14=^[x]:( /* and_c */ x=x19 | x=x24)
+
+Here x14 would be collected as a lambda variable. Later when referenced:
+
+x3=^[x]:( /* implicit_conj */ x=x8 | x14(x))
+
+Because x14 was identified as a lambda variable, it will be formatted using function application syntax.
+
 ### Phase 4
 Phase 4 serializes to PWL format as follows:
 

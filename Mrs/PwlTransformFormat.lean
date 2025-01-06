@@ -2,6 +2,7 @@ import Mrs.Basic
 import Mrs.PwlTypes
 import Mrs.Hof
 import Util.InsertionSort
+import Lean.Data.RBTree
 
 namespace PWL.Transform.Format 
 
@@ -116,32 +117,33 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
     dbg_trace s!"FORMAT_PRED: final result='{result}'"
     result
 
-def formatConjunction (ep : EP) (indent : Nat) : String :=
-  dbg_trace s!"FORMAT_CONJ: predicate={ep.predicate} args={ep.rargs}"
-  let indentStr := makeIndent indent
-  (match ep.predicate with
+def getConjComment (pred : String) : String :=
+  match pred with
+  | "implicit_conj" | "_implicit_conj" => " /* implicit_conj */ "
+  | "and_c" | "_and_c" => " /* and_c */ "
+  | _ => ""
+
+def formatConjunction (ep : EP) (indent : Nat) (lambdaVars : Lean.RBTree Var compare) : String :=
+  dbg_trace s!"CONJ FORMAT: {ep.predicate} with args {ep.rargs.map (fun (n,v) => s!"{n}={v.sort}{v.id}")}"
+  let baseIndent := makeIndent indent
+  match ep.predicate with
   | "implicit_conj" | "_implicit_conj" | "and_c" | "_and_c" => 
-    dbg_trace "FORMAT_CONJ: handling conjunction case"
-    let arg0 := ep.rargs.find? (fun p => p.1 == "ARG0")
-    let arg1 := ep.rargs.find? (fun p => p.1 == "ARG1") 
-    let arg2 := ep.rargs.find? (fun p => p.1 == "ARG2")
-    dbg_trace s!"FORMAT_CONJ: found args ARG0={arg0} ARG1={arg1} ARG2={arg2}"
-    (match arg0, arg1, arg2 with
-    | some (_, x), some (_, x1), some (_, x2) =>
+    dbg_trace "-> matched conjunction"
+    match ep.rargs with
+    | [(_, x), (_, x1), (_, x2)] =>
+      dbg_trace s!"-> found args ARG0={x.sort}{x.id} ARG1={x1.sort}{x1.id} ARG2={x2.sort}{x2.id}"
       if x.sort == 'x' && x1.sort == 'x' && x2.sort == 'x' then
-        let result := s!"{indentStr}{x}=^[x]:(\n{makeIndent (indent + 2)}x={x1} | x={x2})"
-        dbg_trace s!"FORMAT_CONJ: x-vars result='{result}'"
-        result
+        let ref1 := if lambdaVars.contains x1 then s!"{x1}(x)" else s!"x={x1}"
+        let ref2 := if lambdaVars.contains x2 then s!"{x2}(x)" else s!"x={x2}"
+        dbg_trace "-> all x-type args confirmed"
+        s!"{baseIndent}{x}=^[x]:({getConjComment ep.predicate}\n{baseIndent}  {ref1} | {ref2})"
       else
-        let result := s!"{indentStr}({ep.predicate}({x}) & arg1({x})={x1} & arg2({x})={x2})"
-        dbg_trace s!"FORMAT_CONJ: mixed vars result='{result}'"
-        result
-    | _, _, _ => 
-      dbg_trace "FORMAT_CONJ: missing args, using base predicate"
-      s!"{indentStr}{ep.predicate}")
-  | _ => 
-    dbg_trace "FORMAT_CONJ: non-conjunction predicate"
-    s!"{indentStr}{ep.predicate}")
+        dbg_trace "-> using standard format (not all x-type)"
+        s!"{baseIndent}({ep.predicate}({x}) & arg1({x})={x1} & arg2({x})={x2})"
+    | _ => 
+      dbg_trace "-> missing required args"
+      s!"{baseIndent}{ep.predicate}"
+  | _ => s!"{baseIndent}{ep.predicate}"
 
 end PWL.Transform.Format
 

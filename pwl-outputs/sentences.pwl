@@ -26,8 +26,8 @@
         size(S)=1 &
         ?[x19]:(
           S(x19) & /* the_q BODY */
-          x14=^[x]:(
-            x=x19 | x=x24)
+          x24=^[x]:( /* and_c */ 
+            x=x19 | x14(x))
         ))) &
     ?[S]:(/* the_q */
       S=^[s0]:(
@@ -42,10 +42,11 @@
         ?[x3]:(/* udef_q */
           ?[x8]:(/* proper_q */
             ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
-            x3=^[x]:(
-              x=x8 | x=x14(x))) &
-          ?[e45,e30,e31]:(/* body_guard */
+            x14=^[x]:( /* implicit_conj */ 
+              x=x8 | x=x3)) &
+          ?[e45,e30,e2,e31]:(/* body_guard */
             (be_v_id(e45) & arg1(e45)=x3 & arg2(e45)=x46) &
+            (and_c(e2) & arg1(e2)=e30 & arg2(e2)=e45) &
             (in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x32) &
             (live_v_1(e30) & arg1(e30)=x3)))
       ))))
@@ -60,14 +61,15 @@
     (pron(x34)) &
     ?[x3]:(/* a_q */
       (killer_n_1(x3)) &
-      ?[i23,e9,i8]:(/* body_guard */
-        ~?[x28]:(/* def_explicit_q */
+      ?[i23,e22,e9,e2,i8]:(/* body_guard */
+        ~ /* never_a_1 */ ?[x28]:(/* def_explicit_q */
           ?[i39,e33]:(/* rstr_guard */
             (victim_n_of(x28) & arg1(x28)=i39) &
             (poss(e33) & arg1(e33)=x28 & arg2(e33)=x34)) &
           ?[e22,e27,i26]:(/* body_guard */
             (more_comp(e27) & arg1(e27)=e22 & arg2(e27)=x28) &
             (rich_a_in(e22) & arg1(e22)=x3 & arg2(e22)=i26))) &
+        (and_c(e2) & arg1(e2)=e9 & arg2(e2)=e22) &
         (hate_v_1(e9) & arg1(e9)=x3 & arg2(e9)=x10) &
         (always_a_1(i8) & arg1(i8)=e9)))))
 ;
@@ -105,7 +107,7 @@
 ;
 ![x8]:(/* every_q */
   ?[e13]:(/* rstr_guard */
-    ~?[x19]:(/* proper_q */
+    ~ /* neg */ ?[x19]:(/* proper_q */
       ?[x25]:(/* udef_q */
         ?[i30]:(/* rstr_guard */
           (aunt_n_of(x25) & arg1(x25)=i30)) &
@@ -154,7 +156,7 @@
     ?[e2]:(/* body_guard */
       ~hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)))
 ;
-~?[S]:(/* the_q */
+~ /* neg */ ?[S]:(/* the_q */
   S=^[s0]:(
     (butler_n_1(s0))) &
   size(S)=1 &
