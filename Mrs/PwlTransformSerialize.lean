@@ -28,10 +28,6 @@ def debugNested (f : Formula) : String :=
 
 partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) : String :=
   let indentStr := if skipInitialIndent then "" else makeIndent ind
-  dbg_trace s!"formatAsPWL: skipInitial={skipInitialIndent} ind={ind} indentStr='{indentStr}' formula={match f with 
-    | Formula.atom ep => s!"{ep.predicate}"
-    | Formula.scope _ q _ => s!"scope({q})"
-    | Formula.conj fs => s!"conj({fs.length})"}"
 
   match f with 
   | Formula.atom ep =>
@@ -40,9 +36,9 @@ partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : 
       if ep.rargs.all (fun arg => arg.2.sort == 'x') then
         formatConjunction ep ind
       else
-        formatPredArgs ep.predicate ep.rargs ep.carg (if skipInitialIndent then 0 else ind) false
+        formatPredArgs ep.predicate ep.rargs ep.carg ind false
     else
-      formatPredArgs ep.predicate ep.rargs ep.carg (if skipInitialIndent then 0 else ind) false
+      formatPredArgs ep.predicate ep.rargs ep.carg ind false
 
   | Formula.scope vars (some "rstr_guard") inner =>
     if vars.isEmpty then
@@ -58,14 +54,15 @@ partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : 
 
   | Formula.scope vars (some q) inner => 
     let normalized := normalizePredicate q
+    dbg_trace s!"Serializing scope with quantifier: {q} (normalized: {normalized})"
     if (normalized == "neg" || normalized == "never_a_1") && vars.isEmpty then
-      -- For negation, we want zero indentation for the inner formula
-      s!"{makeIndent (ind - 0)}~{formatAsPWL inner bv 0 false true}"
+      s!"{indentStr}~{formatAsPWL inner bv ind false true}"  
     else
       match normalized with
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip)
       | _ =>
-        s!"{indentStr}?[{varList_toString vars}]:(/* {normalized} */\n{formatAsPWL inner bv (ind + 2) false false})"
+        let qtype := if normalized == "every_q" then "!" else "?"
+        s!"{indentStr}{qtype}[{varList_toString vars}]:(/* {normalized} */\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.scope vars none inner =>
     if vars.isEmpty then
