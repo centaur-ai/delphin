@@ -17,14 +17,20 @@ open Lean (Format HashMap)
 open InsertionSort
 open HOF (lastTwoChars)
 open PWL.Transform.MinScoping
-open Format -- Using Format namespace for all formatting functions
-open PWL.Transform.Serialize (formatTheQ) -- Only importing formatTheQ from Serialize
+open Format
+open PWL.Transform.Serialize (formatTheQ)
 
 def debugNested (f : Formula) : String :=
   match f with
   | Formula.atom ep => s!"atom({ep.predicate})"
   | Formula.scope _ _ _ => "scope"
   | Formula.conj fs => s!"conj(len={fs.length})"
+
+def getNegComment (q : String) : String :=
+  match q with
+  | "never_a_1" | "_never_a_1" => " /* never_a_1 */ "
+  | "neg" | "_neg" => " /* neg */ "
+  | _ => ""
 
 partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) (inNoQ : Bool := false) : String :=
   let indentStr := if skipInitialIndent then "" else makeIndent ind
@@ -66,7 +72,7 @@ partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : 
     let normalized := normalizePredicate q
     dbg_trace s!"Serializing scope with quantifier: {q} (normalized: {normalized})"
     if (normalized == "neg" || normalized == "never_a_1") && vars.isEmpty then
-      s!"{makeIndent ind}~{formatAsPWL inner bv ind false true true}"
+      s!"{makeIndent ind}~{getNegComment normalized}{formatAsPWL inner bv ind false true true}"
     else
       match normalized with
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip false)
