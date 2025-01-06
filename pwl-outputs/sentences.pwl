@@ -1,6 +1,5 @@
 ?[x29]:(/* udef_q */
-  ?[i34]:(/* rstr_guard */
-    (aunt_n_of(x29) & arg1(x29)=i34)) &
+  (aunt_n_of(x29)) &
   ?[x10]:(/* proper_q */
     ?[n]:(name(n) & arg1(n)=x10 & arg2(n)="Mansion Dreadbury") &
     ?[x23]:(/* proper_q */
@@ -31,10 +30,10 @@
         ))) &
     ?[S]:(/* the_q */
       S=^[s0]:(
-        ?[e53,e54,i52,e51]:(/* rstr_guard */
+        ?[e53,e54,e51]:(/* rstr_guard */
           (therein_p_dir(e54) & arg1(e54)=e53) &
           (live_v_1(e53) & arg1(e53)=s0) &
-          (people_n_of(s0) & arg1(s0)=i52) &
+          (people_n_of(s0)) &
           (only_a_1(e51) & arg1(e51)=s0))) &
       size(S)=1 &
       ?[x46]:(
@@ -53,27 +52,26 @@
 ?[x10]:(/* def_explicit_q */
   ?[x16]:(/* pronoun_q */
     pron(x16) &
-    ?[i21,e15]:(/* body_guard */
-      (victim_n_of(x10) & arg1(x10)=i21) &
+    ?[e15]:(/* body_guard */
+      (victim_n_of(x10)) &
       (poss(e15) & arg1(e15)=x10 & arg2(e15)=x16))) &
   ?[x34]:(/* pronoun_q */
     pron(x34) &
     ?[x3]:(/* a_q */
       killer_n_1(x3) &
-      ?[i23,e9,i8]:(/* body_guard */
+      ?[e9]:(/* body_guard */
         ~ /* never_a_1 */ ?[x28]:(/* def_explicit_q */
-          ?[i39,e33]:(/* rstr_guard */
-            (victim_n_of(x28) & arg1(x28)=i39) &
+          ?[e33]:(/* rstr_guard */
+            (victim_n_of(x28)) &
             (poss(e33) & arg1(e33)=x28 & arg2(e33)=x34)) &
-          ?[e22,e27,i26]:(/* body_guard */
+          ?[e22,e27]:(/* body_guard */
             (more_comp(e27) & arg1(e27)=e22 & arg2(e27)=x28) &
-            (rich_a_in(e22) & arg1(e22)=x3 & arg2(e22)=i26))) &
+            (rich_a_in(e22) & arg1(e22)=x3))) &
         (hate_v_1(e9) & arg1(e9)=x3 & arg2(e9)=x10) &
-        (_always_a_1(e9) & arg1(e9)=i8)))))
+        (_always_a_1(e9))))))
 ;
 ?[x20]:(/* udef_q */
-  ?[i25]:(/* rstr_guard */
-    (aunt_n_of(x20) & arg1(x20)=i25)) &
+  (aunt_n_of(x20)) &
   ?[x9]:(/* no_q */
     ?[x15]:(/* proper_q */
       ?[e19]:(/* rstr_guard */
@@ -107,14 +105,13 @@
   ?[e13]:(/* rstr_guard */
     ~ /* neg */ ?[x19]:(/* proper_q */
       ?[x25]:(/* udef_q */
-        ?[i30]:(/* rstr_guard */
-          (aunt_n_of(x25) & arg1(x25)=i30)) &
+        (aunt_n_of(x25)) &
         ?[e24]:(/* body_guard */
           ?[n]:(name(n) & arg1(n)=x19 & arg2(n)="Agatha") &
           (x25 = x19) /* compound */)) &
-      ?[e16,e18,i17]:(/* body_guard */
+      ?[e16,e18]:(/* body_guard */
         (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x19) &
-        (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17))) &
+        (rich_a_in(e16) & arg1(e16)=x8))) &
     person(x8)) &
   ?[S]:(/* the_q */
     S=^[s0]:(
@@ -128,8 +125,7 @@
 ;
 ![x8]:(/* every_q */
   ?[x19]:(/* udef_q */
-    ?[i24]:(/* rstr_guard */
-      (aunt_n_of(x19) & arg1(x19)=i24)) &
+    (aunt_n_of(x19)) &
     ?[x14]:(/* proper_q */
       ?[e18]:(/* rstr_guard */
         ?[n]:(name(n) & arg1(n)=x14 & arg2(n)="Agatha") &

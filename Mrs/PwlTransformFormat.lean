@@ -37,19 +37,35 @@ def normalizePredicate (p : String) : String :=
 def makeIndent (n : Nat) : String :=
   String.mk (List.replicate n ' ')
 
+structure FormatConfig where
+  showImplicit : Bool := false
+  deriving Inhabited
+
+def shouldShowVar (cfg : FormatConfig) (v : Var) : Bool :=
+  if !cfg.showImplicit && v.sort == 'i' then
+    false
+  else true
+
+def shouldShowScope (cfg : FormatConfig) (vars : List Var) : Bool :=
+  vars.any (fun v => shouldShowVar cfg v)
+
+def filterScopeVars (cfg : FormatConfig) (vars : List Var) : List Var :=
+  if cfg.showImplicit then vars
+  else vars.filter (shouldShowVar cfg)
+
+def shouldShowArg (cfg : FormatConfig) (p : String × Var) : Bool :=
+  shouldShowVar cfg p.2
+
 def processAlways (args : List (String × Var)) : List (String × Var) :=
-  -- Only reorder if we find exactly one event var and one implicit var
   let evars := args.filter (fun p => p.2.sort == 'e')
   let ivars := args.filter (fun p => p.2.sort == 'i')
   
   if evars.length == 1 && ivars.length == 1 then
-    -- Found exactly one of each, do the reordering
     [evars.head!, ivars.head!]
   else
-    -- Any other combination of variables, leave as is
     args
 
-def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option String) 
+def formatPredArgs (cfg : FormatConfig) (pred : String) (args : List (String × Var)) (carg : Option String) 
     (indent : Nat) (inNegation : Bool) (skipInitialIndent : Bool := false) : String :=
   dbg_trace s!"FORMAT_PRED: start pred={pred} args={args} inNegation={inNegation}"
   let indentStr := if skipInitialIndent then "" else makeIndent indent
@@ -76,22 +92,28 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
         match finalArgs with
         | [(_, e), (_, i)] => 
           if e.sort == 'e' && i.sort == 'i' then
-            -- Only use special formatting if types match
-            s!"{pred}({e}) & arg1({e})={i}"
+            if cfg.showImplicit then
+              s!"{pred}({e}) & arg1({e})={i}"
+            else
+              s!"{pred}({e})"
           else
-            -- Otherwise fall back to standard formatting
+            -- Fall back to standard formatting for non e/i pairs
             let argInfo := processArgs finalArgs
             let normalized := normalizePredicate pred
             match argInfo with
             | { firstArg := some firstArg, otherArgs := rest } =>
-              let argStr := rest.foldl (fun (acc : String × Nat) (p : String × Var) =>
+              let filtered := rest.filter (shouldShowArg cfg)
+              let argStr := filtered.foldl (fun (acc : String × Nat) (p : String × Var) =>
                 let argNum := acc.snd
                 let str := if acc.fst.isEmpty
                   then s!"arg{argNum}({firstArg.2})={p.snd}"
                   else acc.fst ++ " & " ++ s!"arg{argNum}({firstArg.2})={p.snd}"
                 (str, argNum + 1)
               ) ("", 1)
-              s!"{normalized}({firstArg.2}) & {argStr.fst}"
+              if argStr.fst.isEmpty then
+                s!"{normalized}({firstArg.2})"
+              else
+                s!"{normalized}({firstArg.2}) & {argStr.fst}"
             | _ => s!"{normalized}"
         | _ => s!"{pred}"
       else
@@ -104,14 +126,18 @@ def formatPredArgs (pred : String) (args : List (String × Var)) (carg : Option 
             s!"{normalized}({firstArg.2})"
         | { firstArg := none, otherArgs := rest } => s!"{normalized}({rest.head!.2})"
         | { firstArg := some firstArg, otherArgs := rest } =>
-          let argStr := rest.foldl (fun (acc : String × Nat) (p : String × Var) =>
+          let filtered := rest.filter (shouldShowArg cfg)
+          let argStr := filtered.foldl (fun (acc : String × Nat) (p : String × Var) =>
             let argNum := acc.snd
             let str := if acc.fst.isEmpty
               then s!"arg{argNum}({firstArg.2})={p.snd}"
               else acc.fst ++ " & " ++ s!"arg{argNum}({firstArg.2})={p.snd}"
             (str, argNum + 1)
           ) ("", 1)
-          s!"{normalized}({firstArg.2}) & {argStr.fst}"
+          if argStr.fst.isEmpty then
+            s!"{normalized}({firstArg.2})"
+          else
+            s!"{normalized}({firstArg.2}) & {argStr.fst}"
     
     let needsParens := match pred with
     | "=" => false  
@@ -151,9 +177,13 @@ end PWL.Transform.Format
 
 export PWL.Transform.Format (
   ArgInfo
+  FormatConfig 
   processArgs
   varList_toString
   normalizePredicate 
   makeIndent
   formatPredArgs
-  formatConjunction)
+  formatConjunction
+  shouldShowScope
+  filterScopeVars
+)
