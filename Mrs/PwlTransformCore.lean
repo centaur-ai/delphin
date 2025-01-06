@@ -198,8 +198,8 @@ def phase4 (f : Formula) (lambdaVars : Lean.RBTree Var compare) : String :=
 def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :=
   dbg_trace s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
 
-  -- let filteredPreds := phase0 preds
-  let filteredPreds := preds
+  let filteredPreds := phase0 preds
+  -- let filteredPreds := preds
   dbg_trace s!"POST_PHASE0: After phase0 filtered predicates: {filteredPreds.map (fun p => (p.predicate, p.label))}"
   
   let dm := computeDepthMap handle hm
