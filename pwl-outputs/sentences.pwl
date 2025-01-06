@@ -69,7 +69,7 @@
           ?[e22,e27,i26]:(/* body_guard */
             (more_comp(e27) & arg1(e27)=e22 & arg2(e27)=x28) &
             (rich_a_in(e22) & arg1(e22)=x3 & arg2(e22)=i26))) &
-        (and_c(e2) & arg1(e2)=e9 & arg2(e2)=e22) &
+        (and_c(e2) & arg1(e2)=e9 & arg2(e2)=e22) /* this can be commented out */ & 
         (hate_v_1(e9) & arg1(e9)=x3 & arg2(e9)=x10) &
         (always_a_1(i8) & arg1(i8)=e9)))))
 ;
