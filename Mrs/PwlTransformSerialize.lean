@@ -27,57 +27,51 @@ def debugNested (f : Formula) : String :=
   | Formula.conj fs => s!"conj(len={fs.length})"
 
 partial def formatAsPWL (f : Formula) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) : String :=
-  let indentStr := if skipInitialIndent then "" else Format.makeIndent ind
+  let indentStr := if skipInitialIndent then "" else makeIndent ind
+  dbg_trace s!"formatAsPWL: skipInitial={skipInitialIndent} ind={ind} indentStr='{indentStr}' formula={match f with 
+    | Formula.atom ep => s!"{ep.predicate}"
+    | Formula.scope _ q _ => s!"scope({q})"
+    | Formula.conj fs => s!"conj({fs.length})"}"
 
   match f with 
   | Formula.atom ep =>
-    dbg_trace ("ATOMIC: " ++ ep.predicate)
     if (ep.predicate == "implicit_conj" || ep.predicate == "_implicit_conj" ||
         ep.predicate == "and_c" || ep.predicate == "_and_c") then
-      dbg_trace ("ARGS CHECK: " ++ toString (ep.rargs.map (fun a => s!"{a.1}={a.2.sort}{a.2.id}")))
       if ep.rargs.all (fun arg => arg.2.sort == 'x') then
-        dbg_trace "  ALL X-TYPE"
-        Format.formatConjunction ep ind
+        formatConjunction ep ind
       else
-        dbg_trace "  NOT ALL X-TYPE"
-        Format.formatPredArgs ep.predicate ep.rargs ep.carg ind false
+        formatPredArgs ep.predicate ep.rargs ep.carg (if skipInitialIndent then 0 else ind) false
     else
-      Format.formatPredArgs ep.predicate ep.rargs ep.carg ind false
+      formatPredArgs ep.predicate ep.rargs ep.carg (if skipInitialIndent then 0 else ind) false
 
   | Formula.scope vars (some "rstr_guard") inner =>
     if vars.isEmpty then
-      -- Skip the guard scope entirely for empty var list
       formatAsPWL inner bv ind inP skipInitialIndent
     else 
-      -- Include guard scope for non-empty var list
-      s!"{indentStr}?[{Format.varList_toString vars}]:(/* rstr_guard */\n{formatAsPWL inner bv (ind + 2) false false})"
+      s!"{indentStr}?[{varList_toString vars}]:(/* rstr_guard */\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.scope vars (some "body_guard") inner =>
     if vars.isEmpty then
-      -- Skip the guard scope entirely for empty var list
       formatAsPWL inner bv ind inP skipInitialIndent
     else
-      -- Include guard scope for non-empty var list 
-      s!"{indentStr}?[{Format.varList_toString vars}]:(/* body_guard */\n{formatAsPWL inner bv (ind + 2) false false})"
+      s!"{indentStr}?[{varList_toString vars}]:(/* body_guard */\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.scope vars (some q) inner => 
-    let normalized := Format.normalizePredicate q
-    dbg_trace s!"Serializing scope with quantifier: {q} (normalized: {normalized})"
+    let normalized := normalizePredicate q
     if (normalized == "neg" || normalized == "never_a_1") && vars.isEmpty then
-      s!"{indentStr}~{formatAsPWL inner bv ind false true}"
+      -- For negation, we want zero indentation for the inner formula
+      s!"{makeIndent (ind - 0)}~{formatAsPWL inner bv 0 false true}"
     else
       match normalized with
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f bv ind inP skip)
-      | "every_q" =>
-        s!"{indentStr}![{Format.varList_toString vars}]:(/* every_q */\n{formatAsPWL inner bv (ind + 2) false false})"
       | _ =>
-        s!"{indentStr}?[{Format.varList_toString vars}]:(/* {normalized} */\n{formatAsPWL inner bv (ind + 2) false false})"
+        s!"{indentStr}?[{varList_toString vars}]:(/* {normalized} */\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.scope vars none inner =>
     if vars.isEmpty then
       formatAsPWL inner bv ind inP skipInitialIndent
     else
-      s!"{indentStr}?[{Format.varList_toString vars}]:(\n{formatAsPWL inner bv (ind + 2) false false})"
+      s!"{indentStr}?[{varList_toString vars}]:(\n{formatAsPWL inner bv (ind + 2) false false})"
 
   | Formula.conj [] => ""
 

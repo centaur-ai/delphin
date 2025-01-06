@@ -151,66 +151,79 @@ partial def processEPs (parent : Var) (eps : List EP) (seenHandles : List Var)
 
 partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
     (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) 
-    (scopedVars : List Var := []) (inQuant : Bool := false) : (Option Formula × Stats) :=
+    (scopedVars : List Var := []) (inGuard : Bool := false) : (Option Formula × Stats) :=
   if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
-    dbg_trace s!"PROCESS_EP: Skipping {ep.label} - already seen or eliminated"
     (none, stats)
   else
     let newSeen := ep.label :: seenHandles
     let normalized := normalizePredicate ep.predicate
-    dbg_trace s!"PROCESS_EP: {normalized} with label {ep.label} parent={parent}"
     
     match normalized with
+    | "neg" => 
+      match ep.rargs.find? (fun p => p.1 == "ARG1") with 
+      | none => (none, stats)
+      | some (_, handle) =>
+        match hm.find? handle with
+        | none => (none, stats)
+        | some preds =>
+          match processPredicates handle preds newSeen hm stats ev scopedVars true with
+          | (some inner, stats1) => 
+            (some (Formula.scope [] (some "neg") inner), stats1)
+          | (none, stats1) => (none, stats1)
+
+    | "colon_p_namely" =>
+      match ep.rargs.find? (fun p => p.1 == "ARG0"),
+            ep.rargs.find? (fun p => p.1 == "ARG1"), 
+            ep.rargs.find? (fun p => p.1 == "ARG2") with
+      | some (_, evar), some (_, handle1), some (_, handle2) =>
+        let preds1 := hm.find? handle1 |>.getD []
+        let preds2 := hm.find? handle2 |>.getD []
+        match processPredicates handle1 preds1 newSeen hm stats ev scopedVars true,
+              processPredicates handle2 preds2 newSeen hm stats ev scopedVars true with
+        | (some part1, stats1), (some part2, stats2) =>
+          let formula := Formula.scope [evar] (some "colon_p_namely") (Formula.conj [part1, part2])
+          (some formula, addStat stats2 4)
+        | _, _ => (none, stats)
+      | _, _, _ => (none, stats)
+
     | p =>
       if lastTwoChars p == "_q" then
         match getOrderedQuantArgs ep.rargs with
         | none => (none, stats)
         | some (arg0, rstr, body) =>
-          dbg_trace s!"QUANT: Processing {p} ARG0={arg0} RSTR={rstr} BODY={body}"
           let rstrPreds := hm.find? rstr |>.getD []
           let bodyPreds := hm.find? body |>.getD []
-          dbg_trace s!"QUANT: RSTR preds={rstrPreds.map (·.predicate)} BODY preds={bodyPreds.map (·.predicate)}"
           
           match processPredicates ep.label rstrPreds newSeen hm stats ev scopedVars true,
                 processPredicates ep.label bodyPreds newSeen hm stats ev scopedVars true with
           | (some rstrFormula, stats1), (some bodyFormula, stats2) =>
-            dbg_trace s!"QUANT: Got formulas RSTR={rstrFormula} BODY={bodyFormula}"
-            -- Always collect guard events when in a quantifier
             let rstrEvents := rstrPreds.foldl (fun acc p => 
-              acc ++ (p.rargs.filter (fun a => 
-                (a.2.sort == 'e' || a.2.sort == 'i') && !(scopedVars.contains a.2)) |>.map (·.2))) [] |>.eraseDups
+              acc ++ (p.rargs.filter (fun arg => 
+                (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2))) [] |>.eraseDups
             let bodyEvents := bodyPreds.foldl (fun acc p => 
-              acc ++ (p.rargs.filter (fun a => 
-                (a.2.sort == 'e' || a.2.sort == 'i') && !(scopedVars.contains a.2)) |>.map (·.2))) [] |>.eraseDups
-            
-            dbg_trace s!"QUANT: Events RSTR={rstrEvents} BODY={bodyEvents}"
+              acc ++ (p.rargs.filter (fun arg => 
+                (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2))) [] |>.eraseDups
 
-            -- Always create guard scopes for the_q
-            let rstrGuarded := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
-            let bodyGuarded := Formula.scope bodyEvents (some "body_guard") bodyFormula
-            let formula := Formula.scope [arg0] (some p) (Formula.conj [rstrGuarded, bodyGuarded])
+            let guardedRstr := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
+            let guardedBody := if p == "no_q" then
+                -- For no_q, add negation to body
+                Formula.scope bodyEvents (some "body_guard") (Formula.scope [] (some "neg") bodyFormula)
+              else
+                Formula.scope bodyEvents (some "body_guard") bodyFormula
             
-            dbg_trace s!"QUANT: Final formula={formula}"
+            let formula := Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])
             (some formula, addStat stats2 3)
           | _, _ => (none, stats)
+      
       else 
-        -- Not a quantifier - handle normal predicates
-        match ep.predicate with
-        | "rstr_guard" | "body_guard" =>
-          let localScopeVars := ep.rargs.filter (fun arg => 
-            isEventOrImplicit arg.2 && !(scopedVars.contains arg.2)) |>.map (·.2)
-          match localScopeVars with 
+        if inGuard then
+          (some (Formula.atom ep), stats)
+        else
+          let eventVars := ep.rargs.filter (fun arg => 
+            (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2)
+          match eventVars with
           | [] => (some (Formula.atom ep), stats)
-          | newScopedVars => (some (Formula.scope newScopedVars none (Formula.atom ep)), stats)
-        | _ =>
-          if inQuant then 
-            (some (Formula.atom ep), stats)
-          else
-            let localScopeVars := ep.rargs.filter (fun arg => 
-              isEventOrImplicit arg.2 && !(scopedVars.contains arg.2)) |>.map (·.2)
-            match localScopeVars with 
-            | [] => (some (Formula.atom ep), stats)
-            | newScopedVars => (some (Formula.scope newScopedVars none (Formula.atom ep)), stats)
+          | evs => (some (Formula.scope evs none (Formula.atom ep)), stats)
 
 end
 
