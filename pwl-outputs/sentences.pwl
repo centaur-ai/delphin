@@ -21,7 +21,7 @@
     ?[x24]:(/* proper_q */
       ?[n]:(name(n) & arg1(n)=x24 & arg2(n)="Charles") &
       ?[S]:(/* the_q */
-        S=^[s]:(
+        S=^[s0]:(
           (butler_n_1(s0))) &
         size(S)=1 &
         ?[x19]:(
@@ -30,7 +30,7 @@
             x=x19 | x=x24)
         ))) &
     ?[S]:(/* the_q */
-      S=^[s]:(
+      S=^[s0]:(
         ?[e53,e54,i52,e51]:(/* rstr_guard */
           (therein_p_dir(e54) & arg1(e54)=e53) &
           (live_v_1(e53) & arg1(e53)=s0) &
@@ -43,7 +43,7 @@
           ?[x8]:(/* proper_q */
             ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
             x3=^[x]:(
-              x=x8 | x=x14)) &
+              x=x8 | x=x14(x))) &
           ?[e45,e30,e31]:(/* body_guard */
             (be_v_id(e45) & arg1(e45)=x3 & arg2(e45)=x46) &
             (in_p_loc(e31) & arg1(e31)=e30 & arg2(e31)=x32) &
@@ -89,7 +89,7 @@
 ;
 ![x9]:(/* every_q */
   ?[S]:(/* the_q */
-    S=^[s]:(
+    S=^[s0]:(
       (butler_n_1(s0))) &
     size(S)=1 &
     ?[x15]:(
@@ -117,7 +117,7 @@
         (rich_a_in(e16) & arg1(e16)=x8 & arg2(e16)=i17))) &
     (person(x8))) &
   ?[S]:(/* the_q */
-    S=^[s]:(
+    S=^[s0]:(
       (butler_n_1(s0))) &
     size(S)=1 &
     ?[x3]:(
@@ -138,7 +138,7 @@
         (hate_v_1(e26) & arg1(e26)=x14 & arg2(e26)=x8) &
         (person(x8))))) &
   ?[S]:(/* the_q */
-    S=^[s]:(
+    S=^[s0]:(
       (butler_n_1(s0))) &
     size(S)=1 &
     ?[x3]:(
@@ -155,7 +155,7 @@
       ~hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)))
 ;
 ~?[S]:(/* the_q */
-  S=^[s]:(
+  S=^[s0]:(
     (butler_n_1(s0))) &
   size(S)=1 &
   ?[x10]:(
