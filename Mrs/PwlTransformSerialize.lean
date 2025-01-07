@@ -37,7 +37,9 @@ def defaultConfig : FormatConfig := { showImplicit := false }
 instance : ToString (Bool × Nat × Option String) where
   toString v := toString v.1
 
-partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare) (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) (skipInitialIndent : Bool := false) (inNoQ : Bool := false) : String :=
+partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare) 
+    (bv : Option Var) (ind : Nat := 0) (inP : Bool := false) 
+    (skipInitialIndent : Bool := false) (inNoQ : Bool := false) : String :=
   let indentStr := if skipInitialIndent then "" else makeIndent ind
   match f with
   | Formula.atom ep => 
@@ -78,12 +80,7 @@ partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare) (bv
       match normalized with
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f lambdaVars bv ind inP skip false)
       | "no_q" =>
-        let qtype := "?"
-        let filteredVars := filterScopeVars defaultConfig vars
-        if filteredVars.isEmpty then
-          formatAsPWL inner lambdaVars bv ind false false true
-        else
-          s!"{indentStr}{qtype}[{varList_toString filteredVars}]:(/* {normalized} */\n{formatAsPWL inner lambdaVars bv (ind + 2) false false true})"
+        s!"{indentStr}~?[{varList_toString vars}]:(/* no_q */\n{formatAsPWL inner lambdaVars bv (ind + 2) false false false})"
       | _ =>
         let qtype := if normalized == "every_q" then "!" else "?"
         let filteredVars := filterScopeVars defaultConfig vars
@@ -107,7 +104,6 @@ partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare) (bv
   | Formula.conj fs =>
     let nonEmpty := fs.filter (fun f => !f.isEmptyConj)
     String.intercalate " &\n" (nonEmpty.map (fun f => formatAsPWL f lambdaVars bv ind false false inNoQ))
-
 
 end PWL.Transform
 

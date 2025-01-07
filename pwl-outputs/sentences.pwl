@@ -72,7 +72,7 @@
 ;
 ?[x20]:(/* udef_q */
   (aunt_n_of(x20)) &
-  ?[x9]:(/* no_q */
+  ~?[x9]:(/* no_q */
     ?[x15]:(/* proper_q */
       ?[e19]:(/* rstr_guard */
         ?[n]:(name(n) & arg1(n)=x15 & arg2(n)="Agatha") &
@@ -145,10 +145,10 @@
 ;
 ![x8]:(/* every_q */
   person(x8) &
-  ?[x3]:(/* no_q */
+  ~?[x3]:(/* no_q */
     person(x3) &
     ?[e2]:(/* body_guard */
-      ~(hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))
+      (hate_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))
 ;
 ~ /* neg */ ?[S]:(/* the_q */
   S=^[s0]:(

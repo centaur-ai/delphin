@@ -209,8 +209,11 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
             let guardedRstr := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
             let guardedBody := Formula.scope bodyEvents (some "body_guard") bodyFormula
             
-            let formula := Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])
-            (some formula, addStat stats2 3)
+            -- Special case for no_q
+            if p == "no_q" || p == "_no_q" then
+              (some (Formula.scope [arg0] (some "no_q") (Formula.conj [guardedRstr, guardedBody])), stats2)
+            else
+              (some (Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])), stats2)
           | _, _ => (none, stats)
       
       else 
