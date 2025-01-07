@@ -31,7 +31,7 @@ mutual
         | _ => Formula.atom ep
       else Formula.atom ep
 
-    | Formula.conj formulas =>
+    | Formula.conj fs =>
       let rec processFormulas (remaining : List Formula) (acc : List Formula) : List Formula :=
         match remaining with
         | [] => acc
@@ -41,24 +41,33 @@ mutual
           | Formula.conj [] => processFormulas rest acc  
           | _ => processFormulas rest (acc ++ [processed])
 
-      let processed := processFormulas formulas []
+      let processed := processFormulas fs []
       match processed with
       | [] => Formula.conj []
       | [single] => single  
       | multiple => Formula.conj multiple
 
     | Formula.scope vars quant inner =>
-      -- Only remove scopes for event variables from compound expressions
-      if vars.length == 1 && 
-         vars.head!.sort == 'e' && 
-         (match quant with | none => true | _ => false) then
-        removeCompoundFromFormula inner
+      let innerProcessed := removeCompoundFromFormula inner
+      
+      -- Check if this scope contains a compound predicate 
+      let hasCompound := match innerProcessed with
+        | Formula.atom ep => 
+          if ep.predicate == "=" && ep.carg == some "/* compound */" then true else false
+        | Formula.conj fs =>
+          fs.any fun f => match f with
+            | Formula.atom ep => 
+              if ep.predicate == "=" && ep.carg == some "/* compound */" then true else false 
+            | _ => false
+        | _ => false
+
+      -- If scope contains a compound and has event variable, empty the variable list but keep scope
+      if hasCompound && vars.length == 1 && vars.head!.sort == 'e' then
+        Formula.scope [] quant innerProcessed
+      else if innerProcessed.isEmptyConj then
+        Formula.conj []
       else
-        let newInner := removeCompoundFromFormula inner
-        if newInner.isEmptyConj then 
-          Formula.conj []
-        else
-          Formula.scope vars quant newInner
+        Formula.scope vars quant innerProcessed 
 
 end
 

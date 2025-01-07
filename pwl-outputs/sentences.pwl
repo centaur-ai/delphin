@@ -3,9 +3,8 @@
   ?[x10]:(/* proper_q */
     ?[n]:(name(n) & arg1(n)=x10 & arg2(n)="Mansion Dreadbury") &
     ?[x23]:(/* proper_q */
-      ?[e28]:(/* rstr_guard */
-        ?[n]:(name(n) & arg1(n)=x23 & arg2(n)="Agatha") &
-        (x29 = x23) /* compound */) &
+      ?[n]:(name(n) & arg1(n)=x23 & arg2(n)="Agatha") &
+      (x29 = x23) /* compound */ &
       ?[x3]:(/* some_q */
         ?[e8,e9]:(/* rstr_guard */
           (in_p_loc(e9) & arg1(e9)=e8 & arg2(e9)=x10) &
@@ -74,9 +73,8 @@
   (aunt_n_of(x20)) &
   ~?[x9]:(/* no_q */
     ?[x15]:(/* proper_q */
-      ?[e19]:(/* rstr_guard */
-        ?[n]:(name(n) & arg1(n)=x15 & arg2(n)="Agatha") &
-        (x20 = x15) /* compound */) &
+      ?[n]:(name(n) & arg1(n)=x15 & arg2(n)="Agatha") &
+      (x20 = x15) /* compound */ &
       ?[e27]:(/* body_guard */
         (hate_v_1(e27) & arg1(e27)=x15 & arg2(e27)=x9) &
         person(x9))) &
@@ -106,9 +104,8 @@
     ~ /* neg */ ?[x19]:(/* proper_q */
       ?[x25]:(/* udef_q */
         (aunt_n_of(x25)) &
-        ?[e24]:(/* body_guard */
-          ?[n]:(name(n) & arg1(n)=x19 & arg2(n)="Agatha") &
-          (x25 = x19) /* compound */)) &
+        ?[n]:(name(n) & arg1(n)=x19 & arg2(n)="Agatha") &
+        (x25 = x19) /* compound */) &
       ?[e16,e18]:(/* body_guard */
         (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x19) &
         (rich_a_in(e16) & arg1(e16)=x8))) &
@@ -127,9 +124,8 @@
   ?[x19]:(/* udef_q */
     (aunt_n_of(x19)) &
     ?[x14]:(/* proper_q */
-      ?[e18]:(/* rstr_guard */
-        ?[n]:(name(n) & arg1(n)=x14 & arg2(n)="Agatha") &
-        (x19 = x14) /* compound */) &
+      ?[n]:(name(n) & arg1(n)=x14 & arg2(n)="Agatha") &
+      (x19 = x14) /* compound */ &
       ?[e26]:(/* body_guard */
         (hate_v_1(e26) & arg1(e26)=x14 & arg2(e26)=x8) &
         person(x8)))) &
