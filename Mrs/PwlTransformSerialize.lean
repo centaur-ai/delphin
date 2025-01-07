@@ -81,6 +81,17 @@ partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare)
       | "the_q" => formatTheQ vars inner ind (fun f bv ind inP skip => formatAsPWL f lambdaVars bv ind inP skip false)
       | "no_q" =>
         s!"{indentStr}~?[{varList_toString vars}]:(/* no_q */\n{formatAsPWL inner lambdaVars bv (ind + 2) false false false})"
+      | "every_q" =>
+        -- Handle universal quantifier differently
+        match inner with
+        | Formula.conj [rstr, body] =>
+          -- Format as implication between restriction and body
+          let rstrStr := formatAsPWL rstr lambdaVars bv (ind + 2) false false false
+          let bodyStr := formatAsPWL body lambdaVars bv (ind + 2) false false false
+          s!"{indentStr}![{varList_toString vars}]:(/* {normalized} */\n{rstrStr} =>\n{bodyStr})"
+        | _ =>
+          -- Fallback for other structures
+          s!"{indentStr}![{varList_toString vars}]:(/* {normalized} */\n{formatAsPWL inner lambdaVars bv (ind + 2) false false false})"
       | _ =>
         let qtype := if normalized == "every_q" then "!" else "?"
         let filteredVars := filterScopeVars defaultConfig vars

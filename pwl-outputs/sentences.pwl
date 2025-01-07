@@ -93,7 +93,7 @@
       ?[e14]:(/* body_guard */
         (except_p(e14) & arg1(e14)=x9 & arg2(e14)=x15) &
         person(x9))
-    )) &
+    )) =>
   ?[x3]:(/* proper_q */
     ?[n]:(name(n) & arg1(n)=x3 & arg2(n)="Agatha") &
     ?[e2]:(/* body_guard */
@@ -109,7 +109,7 @@
       ?[e16,e18]:(/* body_guard */
         (more_comp(e18) & arg1(e18)=e16 & arg2(e18)=x19) &
         (rich_a_in(e16) & arg1(e16)=x8))) &
-    person(x8)) &
+    person(x8)) =>
   ?[S]:(/* the_q */
     S=^[s0]:(
       butler_n_1(s0)) &
@@ -128,7 +128,7 @@
       (x19 = x14) /* compound */ &
       ?[e26]:(/* body_guard */
         (hate_v_1(e26) & arg1(e26)=x14 & arg2(e26)=x8) &
-        person(x8)))) &
+        person(x8)))) =>
   ?[S]:(/* the_q */
     S=^[s0]:(
       butler_n_1(s0)) &
@@ -140,7 +140,7 @@
     )))
 ;
 ![x8]:(/* every_q */
-  person(x8) &
+  person(x8) =>
   ~?[x3]:(/* no_q */
     person(x3) &
     ?[e2]:(/* body_guard */
