@@ -22,9 +22,9 @@ mutual
     match f with
     | Formula.atom ep =>
       if isConjunction ep then
-        match ep.rargs with
-        | (_, x) :: _ => (f, RBTree.empty.insert x)  -- x is lambda output 
-        | _ => (f, RBTree.empty)
+        match ep.rargs.find? (fun arg => arg.1 == "ARG0") with 
+        | some (_, x) => (f, RBTree.empty.insert x)  -- x is ARG0/lambda output
+        | none => (f, RBTree.empty)
       else 
         (f, RBTree.empty)
 
