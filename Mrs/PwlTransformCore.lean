@@ -20,6 +20,13 @@ open PWL.Transform.ScopingCore (EliminatedVars isVarEliminated collectEliminated
 open PWL.Transform.Scoping (processPredicates)
 open PWL.Transform.MinScoping (ScopedEP analyzeFormula)
 
+structure RewriteConfig where
+  rewriteAQ : Bool := false
+  deriving Inhabited
+
+def rewriteDefaultConfig : RewriteConfig :=
+  { rewriteAQ := true }
+
 instance : Ord (EP × Nat) where
   compare := fun p1 p2 => 
     match compare p1.2 p2.2 with
@@ -195,6 +202,31 @@ def phase3_3 : Formula → (Formula × Lean.RBTree Var compare) :=
 
 def phase3_4 := PWL.Transform.WhichQ.simplifyWhichQ
 
+partial def rewriteAQ (f : Formula) (cfg : RewriteConfig := rewriteDefaultConfig) : Formula :=
+  if !cfg.rewriteAQ then f
+  else
+    let rec rewrite (f : Formula) : Formula :=
+      match f with 
+      | Formula.scope vars (some q) inner =>
+        let newQuant := if q == "a_q" || q == "_a_q" 
+                       then "every_q" 
+                       else q
+        Formula.scope vars (some newQuant) (rewrite inner)
+      | Formula.scope vars none inner =>
+        Formula.scope vars none (rewrite inner)
+      | Formula.conj fs =>
+        Formula.conj (fs.map rewrite)
+      | Formula.atom ep => Formula.atom ep
+    rewrite f
+
+def phase3_5 (f : Formula) (cfg : RewriteConfig := rewriteDefaultConfig) : Formula := 
+  dbg_trace "\n============= Starting a_q rewrite ============="
+  dbg_trace s!"Input formula: {f}"
+  let result := rewriteAQ f cfg
+  dbg_trace s!"Output formula: {result}"
+  dbg_trace "=== Finished a_q rewrite ==="
+  result
+
 def phase4 (f : Formula) (lambdaVars : Lean.RBTree Var compare) : String :=
   formatAsPWL f lambdaVars none
 
@@ -230,7 +262,9 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       dbg_trace s!"POST_PHASE3.3: Lambda variables collected: {lambdaVars.fold (init := []) fun xs x => x :: xs}"
       let whichQSimplified := phase3_4 preFormat
       dbg_trace s!"POST_PHASE3.4: Which-Q simplified: {whichQSimplified}"
-      let result := phase4 whichQSimplified lambdaVars
+      let aqRewritten := phase3_5 whichQSimplified rewriteDefaultConfig
+      dbg_trace s!"POST_PHASE3.5: A_Q rewritten: {aqRewritten}"
+      let result := phase4 aqRewritten lambdaVars
       dbg_trace s!"Final result: {result}"
       result
 
