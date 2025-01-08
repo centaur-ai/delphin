@@ -209,6 +209,33 @@ x3=^[x]:( /* implicit_conj */ x=x8 | x14(x))
 
 Because x14 was identified as a lambda variable, it will be formatted using function application syntax.
 
+### Phase 3.4
+Phase 3.4 transforms which_q expressions into an appropriate lambda-scoped formula:
+
+1. Detects formulas containing which_q quantifiers
+2. For identified which_q formulas:
+   - Wraps the formula in a lambda scope with special variable q0
+   - Adds an equality predicate relating q0 to the which_q variable
+   - Preserves the rest of the formula structure within the new scope
+
+For example, a which_q formula like:
+```
+?[x3]:(/* which_q */
+  person(x3) &
+  kill(e2,x3,x8))
+```
+
+Is transformed to:
+```
+^[q0]:(
+  ?[x3]:(/* which_q */
+    person(x3) &
+    kill(e2,x3,x8) &
+    (q0 = x3)))
+```
+
+This transformation enables proper handling of which-questions in the final PWL output.
+
 ### Phase 4
 Phase 4 serializes to PWL format as follows:
 
