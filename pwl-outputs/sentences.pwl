@@ -56,8 +56,8 @@
       (poss(e15) & arg1(e15)=x10 & arg2(e15)=x16))) &
   ?[x34]:(/* pronoun_q */
     pron(x34) &
-    ?[x3]:(/* a_q */
-      killer_n_1(x3) &
+    ![x3]:(/* every_q */
+      killer_n_1(x3) =>
       ?[e9]:(/* body_guard */
         ~ /* never_a_1 */ ?[x28]:(/* def_explicit_q */
           ?[e33]:(/* rstr_guard */
