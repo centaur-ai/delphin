@@ -236,6 +236,31 @@ Is transformed to:
 
 This transformation enables proper handling of which-questions in the final PWL output.
 
+### Phase 3.5
+Phase 3.5 optionally rewrites indefinite a_q quantifiers as universal every_q quantifiers:
+1. By default, this transformation is disabled 
+2. When enabled via RewriteConfig:
+   - Replaces any scope with quantifier "a_q" or "_a_q" with "every_q"  
+   - Processes recursively through all nested scopes and conjunctions
+   - Preserves all other scope properties (variables, inner formulas)
+3. Pass through all other formulas unchanged
+
+For example:
+
+```
+?[x3]:(/* a_q */
+  person(x3) &
+  kill(e2,x3,x8))
+```
+
+Is transformed to:
+
+```
+![x3]:(/* every_q */
+  person(x3) =>
+  kill(e2,x3,x8))
+```
+
 ### Phase 4
 Phase 4 serializes to PWL format as follows:
 
