@@ -102,7 +102,9 @@ partial def formatAsPWL (f : Formula) (lambdaVars : Lean.RBTree Var compare)
 
   | Formula.scope vars none inner =>
     let filteredVars := filterScopeVars defaultConfig vars
-    if filteredVars.isEmpty then
+    if vars.length == 1 && vars.head!.sort == 'q' && vars.head!.id == 0 then
+      s!"{indentStr}^[{varList_toString filteredVars}]:(\n{formatAsPWL inner lambdaVars bv (ind + 2) false false inNoQ})"
+    else if filteredVars.isEmpty then
       formatAsPWL inner lambdaVars bv ind inP skipInitialIndent inNoQ
     else
       s!"{indentStr}?[{varList_toString filteredVars}]:(\n{formatAsPWL inner lambdaVars bv (ind + 2) false false inNoQ})"
