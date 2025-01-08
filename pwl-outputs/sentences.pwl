@@ -158,10 +158,12 @@
         (be_v_id(e2) & arg1(e2)=x3 & arg2(e2)=x10)))
   ))
 ;
-?[x8]:(/* proper_q */
-  ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
-  ?[x3]:(/* which_q */
-    person(x3) &
-    ?[e2]:(/* body_guard */
-      (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8))))
+^[q0]:(
+  ?[x8]:(/* proper_q */
+    ?[n]:(name(n) & arg1(n)=x8 & arg2(n)="Agatha") &
+    ?[x3]:(/* which_q */
+      person(x3) &
+      ?[e2]:(/* body_guard */
+        (kill_v_1(e2) & arg1(e2)=x3 & arg2(e2)=x8)) &
+      (q0 = x3))))
 ;
