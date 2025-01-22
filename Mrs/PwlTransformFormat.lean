@@ -1,6 +1,7 @@
 import Mrs.Basic
 import Mrs.PwlTypes
 import Mrs.Hof
+import Mrs.PwlTransformShared
 import Util.InsertionSort
 import Lean.Data.RBTree
 
@@ -17,8 +18,30 @@ structure ArgInfo where
   deriving Inhabited
 
 instance : ToString ArgInfo where
-  toString
-    | ⟨first, rest⟩ => s!"ArgInfo(first={first}, rest={rest})"
+  toString a := s!"ArgInfo(first={a.firstArg}, rest={a.otherArgs})"
+
+def debugNested (f : Formula) : String :=
+  match f with
+  | Formula.atom ep => s!"atom({ep.predicate})"
+  | Formula.scope _ _ _ => "scope"
+  | Formula.conj fs => s!"conj(len={fs.length})"
+
+def getNegComment (q : String) : String :=
+  match q with
+  | "never_a_1" | "_never_a_1" => " /* never_a_1 */ "
+  | "neg" | "_neg" => " /* neg */ "
+  | _ => ""
+
+def makeIndent (n : Nat) : String :=
+  String.mk (List.replicate n ' ')
+
+def formatWithGuardComments (rstrStr : String) (bodyStr : String) (qvar : Var) (ind : Nat) : String :=
+  let indent := makeIndent (ind + 2)
+  s!"{indent}/* RSTR[{qvar}] */\n{rstrStr} &\n{indent}/* BODY[{qvar}] */\n{bodyStr}"
+
+instance : ToString (Bool × Nat × Option String) where
+  toString v := toString v.1
+
 
 def processArgs (args : List (String × Var)) : ArgInfo :=
   dbg_trace s!"ARGS analysis: input={args.map fun a => (a.1, a.2)}"
@@ -34,12 +57,11 @@ def varList_toString (vars : List Var) : String :=
 def normalizePredicate (p : String) : String :=
   if p.startsWith "_" then p.drop 1 else p
 
-def makeIndent (n : Nat) : String :=
-  String.mk (List.replicate n ' ')
-
 structure FormatConfig where
   showImplicit : Bool := false
   deriving Inhabited
+
+def defaultConfig : FormatConfig := { showImplicit := false }
 
 def shouldShowVar (cfg : FormatConfig) (v : Var) : Bool :=
   if !cfg.showImplicit && v.sort == 'i' then
@@ -82,7 +104,16 @@ def formatPredArgs (cfg : FormatConfig) (pred : String) (args : List (String × 
       | some comment => s!"{indentStr}({var1} = {var2}) {comment}"
       | none => s!"{indentStr}({var1} = {var2})"
     | _ => s!"{indentStr}="
+  else if pred == "and_c" || pred == "_and_c" then
+    dbg_trace s!"FORMAT_PRED: handling and_c with args={args}"
+    match args with
+    | ("ARG0", target) :: ("ARG1", v1) :: ("ARG2", v2) :: ("ARG3", v3) :: [] =>
+      s!"{indentStr}(and_c({target}) & arg1({target})={v1} & arg2({target})={v2} & arg3({target})={v3})"
+    | ("ARG0", target) :: ("ARG1", v1) :: ("ARG2", v2) :: [] =>
+      s!"{indentStr}(and_c({target}) & arg1({target})={v1} & arg2({target})={v2})"
+    | _ => s!"{indentStr}and_c"
   else 
+    -- Rest of existing always/finalize handling
     let finalArgs := if pred == "always_a_1" || pred == "_always_a_1" then
                       processAlways args
                     else args
@@ -142,6 +173,7 @@ def formatPredArgs (cfg : FormatConfig) (pred : String) (args : List (String × 
     let needsParens := match pred with
     | "=" => false  
     | p => !p.endsWith "_q" && args.length > 1
+
     let result := if needsParens then s!"{indentStr}({formatted})" else s!"{indentStr}{formatted}"
     result
 
@@ -153,24 +185,28 @@ def getConjComment (pred : String) : String :=
 
 def formatConjunction (ep : EP) (indent : Nat) (lambdaVars : Lean.RBTree Var compare) : String :=
   let baseIndent := makeIndent indent
-  match ep.predicate with
+  match ep.predicate with 
   | "implicit_conj" | "_implicit_conj" | "and_c" | "_and_c" =>
     match ep.rargs with
-    | [(_, x), (_, x1), (_, x2)] =>
+    | [(_, x), (_, x1), (_, x2)] | [(_, x), (_, x1), (_, x2), (_, _)] =>  -- Match both 3 and 4 arg cases
       if x.sort == 'x' && x1.sort == 'x' && x2.sort == 'x' then
-        let arg0 := ep.rargs.find? (fun p => p.1 == "ARG0")
-        let arg1 := ep.rargs.find? (fun p => p.1 == "ARG1") 
-        let arg2 := ep.rargs.find? (fun p => p.1 == "ARG2")
-        
-        match arg0, arg1, arg2 with
-        | some (_, output), some (_, x1), some (_, x2) =>
-          let ref1 := s!"x={x1}"
-          let ref2 := if lambdaVars.contains x2 then s!"{x2}(x)" else s!"x={x2}"
-          s!"{baseIndent}{output}=^[x]:({getConjComment ep.predicate}\n{baseIndent}  {ref1} | {ref2})"
-        | _, _, _ => s!"{baseIndent}{ep.predicate}"
-
-      else
-        s!"{baseIndent}({ep.predicate}({x}) & arg1({x})={x1} & arg2({x})={x2})"
+        let arg0 := ep.rargs.find? (fun p => p.1 == "ARG0") 
+        let refs := ep.rargs.filter (fun p => p.1 != "ARG0" && p.2.sort == 'x') |>.map (·.2)
+        match arg0 with
+        | some (_, output) =>
+          dbg_trace s!"CONJ_CHECK: {ep.predicate} output={output} lambdas={(lambdaVars.fold (init := []) fun xs x => x :: xs)}"
+          -- Check if this lambda variable is referenced by other lambda definitions
+          if lambdaVars.any (fun v => 
+              -- Check if this lambda var references other lambda vars
+              refs.any (fun r => lambdaVars.contains r) ||
+              -- Is referenced by other lambda vars 
+              v != output && lambdaVars.contains v) then
+            let refStrings := refs.map (fun ref => s!"x={ref}")
+            let disjunction := String.intercalate " | " refStrings  
+            s!"{baseIndent}{output}=^[x]:({getConjComment ep.predicate}\n{baseIndent}  {disjunction})"
+          else s!"{baseIndent}{ep.predicate}"
+        | none => s!"{baseIndent}{ep.predicate}"
+      else s!"{baseIndent}({ep.predicate}({x}) & arg1({x})={x1} & arg2({x})={x2})"
     | _ => s!"{baseIndent}{ep.predicate}"
   | _ => s!"{baseIndent}{ep.predicate}"
 
@@ -187,4 +223,7 @@ export PWL.Transform.Format (
   formatConjunction
   shouldShowScope
   filterScopeVars
+  debugNested
+  getNegComment
+  formatWithGuardComments
 )

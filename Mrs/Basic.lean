@@ -66,7 +66,7 @@ structure EP where
   label : Var
   rargs : List (String × Var)
   carg  : Option String
- deriving BEq, Inhabited
+ deriving BEq, Inhabited, Hashable
 
 instance : ToFormat EP where
  format

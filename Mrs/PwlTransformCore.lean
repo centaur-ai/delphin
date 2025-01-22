@@ -7,6 +7,7 @@ import Mrs.PwlTransformNegationScopeRemoval
 import Mrs.PwlTransformEqualityRemoval
 import Mrs.PwlTransformCompoundRemoval
 import Mrs.PwlTransformLambdaTracking 
+import Mrs.PwlTransformLambdaRestructure
 import Mrs.PwlTransformWhichQ
 import Mrs.Hof
 import Util.InsertionSort
@@ -18,7 +19,7 @@ open MM (Multimap)
 open InsertionSort
 open PWL.Transform.ScopingCore (EliminatedVars isVarEliminated collectEliminatedVars shouldEliminateHandle)
 open PWL.Transform.Scoping (processPredicates)
-open PWL.Transform.MinScoping (ScopedEP analyzeFormula)
+open PWL.Transform.MinScoping (ScopedEP)
 
 structure RewriteConfig where
   rewriteAQ : Bool := false
@@ -227,8 +228,15 @@ def phase3_5 (f : Formula) (cfg : RewriteConfig := rewriteDefaultConfig) : Formu
   dbg_trace "=== Finished a_q rewrite ==="
   result
 
+def phase3_6 (f : Formula) (lambdaVars : Lean.RBTree Var compare) : Formula :=
+  dbg_trace "\n============= Starting lambda scope restructuring ============="
+  let result := PWL.Transform.LambdaRestructure.restructureLambdas f lambdaVars
+  dbg_trace s!"Output formula: {result}"
+  dbg_trace "=== Finished lambda scope restructuring ==="
+  result
+
 def phase4 (f : Formula) (lambdaVars : Lean.RBTree Var compare) : String :=
-  formatAsPWL f lambdaVars none
+  formatAsPWL f f lambdaVars none
 
 def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :=
   dbg_trace s!"Transform - Starting with handle {handle}\nPreds count: {preds.length}\nHandle map size: {hm.keys.length}\nHandle map contents: {(hm.keys.map fun k => (k, hm.find? k))}"
@@ -264,7 +272,9 @@ def transform (handle : Var) (preds : List EP) (hm : Multimap Var EP) : String :
       dbg_trace s!"POST_PHASE3.4: Which-Q simplified: {whichQSimplified}"
       let aqRewritten := phase3_5 whichQSimplified rewriteDefaultConfig
       dbg_trace s!"POST_PHASE3.5: A_Q rewritten: {aqRewritten}"
-      let result := phase4 aqRewritten lambdaVars
+      let restructured := phase3_6 aqRewritten lambdaVars 
+      dbg_trace s!"POST_PHASE3.6: Lambda scopes restructured: {restructured}"
+      let result := phase4 restructured lambdaVars
       dbg_trace s!"Final result: {result}"
       result
 

@@ -5,12 +5,14 @@ import Mrs.Hof
 import Util.InsertionSort
 import Lean.Data.RBTree
 import Lean.Data.RBMap
+import Mrs.PwlTransformLambdaRestructure_Types
 
 namespace PWL.Transform.LambdaTracking
 
 open MRS (Var EP)
 open InsertionSort
 open PWL.Transform
+open PWL.Transform.LambdaRestructure
 open Lean
 
 def isConjunction (ep : EP) : Bool :=
@@ -20,8 +22,8 @@ def isConjunction (ep : EP) : Bool :=
 mutual 
   partial def collectLambdas (f : Formula) : (Formula × RBTree Var compare) :=
     match f with
-    | Formula.atom ep =>
-      if isConjunction ep then
+    | Formula.atom ep => 
+      if isLambdaPredicate ep.predicate then
         match ep.rargs.find? (fun arg => arg.1 == "ARG0") with 
         | some (_, x) => (f, RBTree.empty.insert x)  -- x is ARG0/lambda output
         | none => (f, RBTree.empty)

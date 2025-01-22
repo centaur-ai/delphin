@@ -11,15 +11,48 @@ open Lean (Format HashMap)
 open InsertionSort
 open HOF (lastTwoChars)
 
-instance : Hashable EP where
-  hash e := mixHash 
-    (hash e.predicate) 
-    (mixHash (hash e.label)
-     (mixHash (hash e.rargs)
-      (mixHash (hash e.link) (hash e.carg))))
+inductive Formula where
+  | atom : EP → Formula
+  | conj : List Formula → Formula 
+  | scope : List Var → Option String → Formula → Formula
+  deriving Inhabited
+
+mutual
+  partial def beqFormula : Formula → Formula → Bool
+    | Formula.atom ep1, Formula.atom ep2 => ep1 == ep2
+    | Formula.conj fs1, Formula.conj fs2 => beqFormulaList fs1 fs2
+    | Formula.scope vs1 q1 f1, Formula.scope vs2 q2 f2 =>
+        vs1 == vs2 && q1 == q2 && beqFormula f1 f2
+    | _, _ => false
+
+  partial def beqFormulaList : List Formula → List Formula → Bool
+    | [], [] => true
+    | f1::fs1, f2::fs2 => beqFormula f1 f2 && beqFormulaList fs1 fs2
+    | _, _ => false
+end
+
+instance : BEq Formula where
+  beq := beqFormula
+
+instance : BEq (List Formula) where
+  beq := beqFormulaList
+
+partial def Formula.hash : Formula → UInt64 
+  | .atom ep => mixHash 1 (Hashable.hash ep)
+  | .conj fs => 
+      let h := fs.foldl (fun acc f => mixHash acc (Formula.hash f)) 0
+      mixHash 2 h
+  | .scope vars quant inner => 
+      mixHash 3 $ mixHash (Hashable.hash vars) $ mixHash (Hashable.hash quant) (Formula.hash inner)
+
+instance : Hashable Formula where
+  hash := Formula.hash
+
+instance : Hashable (List Formula) where
+  hash fs := fs.foldl (fun acc f => mixHash acc (Formula.hash f)) 0
 
 structure Stats where
-  counts : Lean.HashMap Nat Nat := Lean.HashMap.empty
+  counts : HashMap Nat Nat := HashMap.empty
   deriving Inhabited 
 
 def addStat (stats : Stats) (key : Nat) : Stats :=
@@ -54,6 +87,116 @@ instance : ToString CompoundMatch where
 instance : ToString (List CompoundMatch) where
   toString xs := String.intercalate ", " (xs.map toString)
 
+mutual
+  partial def formulaToString : Formula → String
+    | Formula.atom ep => toString ep
+    | Formula.conj fs => "(" ++ listFormulaToString fs ++ ")"
+    | Formula.scope vars none inner => s!"?[{vars}]: {formulaToString inner}"
+    | Formula.scope vars (some q) inner => s!"?[{vars}]: /* {q} */ {formulaToString inner}"
+
+  partial def listFormulaToString : List Formula → String
+    | [] => ""
+    | [f] => formulaToString f 
+    | f :: fs => formulaToString f ++ " & " ++ listFormulaToString fs
+end
+
+instance : ToString Formula where
+  toString := formulaToString
+
+instance : ToString (List Formula) where
+  toString fs := "[" ++ String.intercalate ", " (fs.map formulaToString) ++ "]"
+
+def Formula.isAtom : Formula → Bool
+  | atom _ => true 
+  | _ => false
+
+def Formula.isConj : Formula → Bool 
+  | conj _ => true
+  | _ => false
+
+def Formula.hasScope : Formula → Bool
+  | scope _ _ _ => true
+  | _ => false
+
+def Formula.getScopedFormula : Formula → Option Formula
+  | scope _ _ f => some f
+  | _ => none
+
+def Formula.getScopeVars : Formula → Option (List Var)
+  | scope vs _ _ => some vs
+  | _ => none
+
+def Formula.isEmptyConj : Formula → Bool
+  | conj [] => true
+  | conj [f] => f.isEmptyConj
+  | _ => false
+
+partial def Formula.removeEmptyConj : Formula → Formula 
+  | atom ep => atom ep
+  | conj [] => conj []  
+  | conj [f] => f.removeEmptyConj
+  | conj fs =>
+    let nonEmpty := fs.filter (fun f => !f.isEmptyConj)
+    match nonEmpty with
+    | [] => conj []
+    | [f] => f.removeEmptyConj
+    | fs => conj (fs.map Formula.removeEmptyConj)
+  | scope vars quant inner => 
+    scope vars quant (inner.removeEmptyConj)
+
+private def substituteVar (old new : Var) (args : List (String × Var)) : List (String × Var) :=
+  dbg_trace s!"substituteVar old:{old} new:{new} args:{args}"
+  args.map fun (name, var) => 
+    let res := if var == old then (name, new) else (name, var)
+    dbg_trace s!"  {name}: {var} => {res.2}"
+    res
+
+partial def Formula.substitute (old new : Var) : Formula → Formula
+  | atom ep => 
+    dbg_trace s!"substitute in atom EP {ep.predicate}, args: {ep.rargs}"
+    let newArgs := substituteVar old new ep.rargs
+    dbg_trace s!"  after substitution: {newArgs}"
+    atom { ep with rargs := newArgs }
+  | conj fs => 
+    dbg_trace "substitute in conj"
+    conj (fs.map (Formula.substitute old new))
+  | scope vars quant inner => 
+    dbg_trace s!"substitute in scope: vars {vars}"
+    let newVars := vars.map fun v => if v == old then new else v
+    dbg_trace s!"  after var substitution: {newVars}"
+    scope newVars quant (inner.substitute old new)
+
+def removeExtraQuotes (s : String) : String :=
+  if s.startsWith "\"" && s.endsWith "\"" then s.extract ⟨1⟩ ⟨s.length - 1⟩ else s
+
+def normalizedPredName (predicate : String) : String :=
+  if predicate.startsWith "_" then predicate.drop 1 else predicate
+
+def joinSep (l : List String) (sep : String) : String := 
+  l.foldr (fun s r => (if r == "" then s else r ++ sep ++ s)) ""
+
+def joinComma (l : List String) : String := 
+  joinSep l ","
+
+def reformQuotedPair (s : String) : String :=
+  let parts := String.split s (· == ' ')
+  let unquoted := parts.map removeExtraQuotes
+  "\"" ++ " ".intercalate unquoted ++ "\""
+
+def getArg (ep : EP) (name : String) : Option Var :=
+  ep.rargs.find? (fun r => r.1 == name)
+  |>.map (fun r => r.2)
+
+def orderArgs (args : List (String × Var)) : List (String × Var) :=
+  args.filter (fun a => a.1.startsWith "ARG") |> insertionSort
+
+def getVarDeps (ep : EP) : List Var :=
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
+    |>.map (·.2)
+
+def getScopableArgs (ep : EP) : List (String × Var) :=
+  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
+
 def shouldRemove (p : EP) (pat : CompoundMatch) : Bool :=
   p == pat.compound || p == pat.properQ1.predicate || p == pat.properQ2.predicate || 
   p == pat.named1.predicate || p == pat.named2.predicate
@@ -69,11 +212,9 @@ partial def findHandleDepth (pred : EP) (hm : Multimap Var EP) (rootHandle : Var
     if handle == rootHandle then 0
     else if seen.contains handle then 999999
     else
-      -- Find all predicates at this handle
       match hm.find? handle with
       | none => 999999
       | some preds =>
-        -- Find predicates that reference other handles and get min depth
         let minChildDepth := preds.foldl (fun minD curP =>
           let childHandles := curP.rargs.filter (fun (n, v) => v.sort == 'h') |>.map (·.2)
           let childDepths := childHandles.map (fun h => findDepth h (handle :: seen))
@@ -190,140 +331,6 @@ def getCompoundPattern (preds : List EP) (c : EP) (hm : Multimap Var EP) (dm : D
     else none
   | _ => none
 
-inductive Formula where
-  | atom : EP → Formula
-  | conj : List Formula → Formula 
-  | scope : List Var → Option String → Formula → Formula
-  deriving Inhabited
-
-mutual
-  partial def beqFormula : Formula → Formula → Bool
-    | Formula.atom ep1, Formula.atom ep2 => ep1 == ep2
-    | Formula.conj fs1, Formula.conj fs2 => beqFormulaList fs1 fs2
-    | Formula.scope vs1 q1 f1, Formula.scope vs2 q2 f2 =>
-        vs1 == vs2 && q1 == q2 && beqFormula f1 f2
-    | _, _ => false
-
-  partial def beqFormulaList : List Formula → List Formula → Bool
-    | [], [] => true
-    | f1::fs1, f2::fs2 => beqFormula f1 f2 && beqFormulaList fs1 fs2
-    | _, _ => false
-end
-
-instance : BEq Formula where
-  beq := beqFormula
-
-instance : BEq (List Formula) where
-  beq := beqFormulaList
-
-mutual
-  partial def formulaToString : Formula → String
-    | Formula.atom ep => toString ep
-    | Formula.conj fs => "(" ++ listFormulaToString fs ++ ")"
-    | Formula.scope vars none inner => s!"?[{vars}]: {formulaToString inner}"
-    | Formula.scope vars (some q) inner => s!"?[{vars}]: /* {q} */ {formulaToString inner}"
-
-  partial def listFormulaToString : List Formula → String
-    | [] => ""
-    | [f] => formulaToString f 
-    | f :: fs => formulaToString f ++ " & " ++ listFormulaToString fs
-end
-
-instance : ToString Formula where
-  toString := formulaToString
-
-instance : ToString (List Formula) where
-  toString fs := "[" ++ String.intercalate ", " (fs.map formulaToString) ++ "]"
-
-def Formula.isAtom : Formula → Bool
-  | atom _ => true 
-  | _ => false
-
-def Formula.isConj : Formula → Bool 
-  | conj _ => true
-  | _ => false
-
-def Formula.hasScope : Formula → Bool
-  | scope _ _ _ => true
-  | _ => false
-
-def Formula.getScopedFormula : Formula → Option Formula
-  | scope _ _ f => some f
-  | _ => none
-
-def Formula.getScopeVars : Formula → Option (List Var)
-  | scope vs _ _ => some vs
-  | _ => none
-
-def Formula.isEmptyConj : Formula → Bool
-  | conj [] => true
-  | conj [f] => f.isEmptyConj
-  | _ => false
-
-partial def Formula.removeEmptyConj : Formula → Formula 
-  | atom ep => atom ep
-  | conj [] => conj []  
-  | conj [f] => f.removeEmptyConj
-  | conj fs =>
-    let nonEmpty := fs.filter (fun f => !f.isEmptyConj)
-    match nonEmpty with
-    | [] => conj []
-    | [f] => f.removeEmptyConj
-    | fs => conj (fs.map Formula.removeEmptyConj)
-  | scope vars quant inner => 
-    scope vars quant (inner.removeEmptyConj)
-
-private def substituteVar (old new : Var) (args : List (String × Var)) : List (String × Var) :=
-  dbg_trace s!"substituteVar old:{old} new:{new} args:{args}"
-  args.map fun (name, var) => 
-    let res := if var == old then (name, new) else (name, var)
-    dbg_trace s!"  {name}: {var} => {res.2}"
-    res
-
-partial def Formula.substitute (old new : Var) : Formula → Formula
-  | atom ep => 
-    dbg_trace s!"substitute in atom EP {ep.predicate}, args: {ep.rargs}"
-    let newArgs := substituteVar old new ep.rargs
-    dbg_trace s!"  after substitution: {newArgs}"
-    atom { ep with rargs := newArgs }
-  | conj fs => 
-    dbg_trace "substitute in conj"
-    conj (fs.map (Formula.substitute old new))
-  | scope vars quant inner => 
-    dbg_trace s!"substitute in scope: vars {vars}"
-    let newVars := vars.map fun v => if v == old then new else v
-    dbg_trace s!"  after var substitution: {newVars}"
-    scope newVars quant (inner.substitute old new)
-
-def removeExtraQuotes (s : String) : String :=
-  if s.startsWith "\"" && s.endsWith "\"" then s.extract ⟨1⟩ ⟨s.length - 1⟩ else s
-
-def normalizedPredName (predicate : String) : String :=
-  if predicate.startsWith "_" then predicate.drop 1 else predicate
-
-def joinSep (l : List String) (sep : String) : String := 
-  l.foldr (fun s r => (if r == "" then s else r ++ sep ++ s)) ""
-
-def joinComma (l : List String) : String := 
-  joinSep l ","
-
-def reformQuotedPair (s : String) : String :=
-  let parts := String.split s (· == ' ')
-  let unquoted := parts.map removeExtraQuotes
-  "\"" ++ " ".intercalate unquoted ++ "\""
-
-def getArg (ep : EP) (name : String) : Option Var :=
-  ep.rargs.find? (fun r => r.1 == name)
-  |>.map (fun r => r.2)
-
-def orderArgs (args : List (String × Var)) : List (String × Var) :=
-  args.filter (fun a => a.1.startsWith "ARG") |> insertionSort
-
-def getVarDeps (ep : EP) : List Var :=
-  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
-    |>.map (·.2)
-
-def getScopableArgs (ep : EP) : List (String × Var) :=
-  ep.rargs.filter (fun arg => arg.2.sort == 'x' || arg.2.sort == 'e' || arg.2.sort == 'i')
-
 end PWL.Transform
+
+export PWL.Transform (Formula Stats addStat getOrderedQuantArgs)

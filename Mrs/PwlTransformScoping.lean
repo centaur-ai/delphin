@@ -153,10 +153,12 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
     (hm : Multimap Var EP) (stats : Stats) (ev : EliminatedVars) 
     (scopedVars : List Var := []) (inGuard : Bool := false) : (Option Formula × Stats) :=
   if seenHandles.contains ep.label || shouldEliminateHandle hm ev ep.label then
+    dbg_trace s!"PROCESS_EP: Skipping {ep.label} - already seen or eliminated"
     (none, stats)
   else
     let newSeen := ep.label :: seenHandles
     let normalized := normalizePredicate ep.predicate
+    dbg_trace s!"\nPROCESS_EP: {normalized} with label {ep.label} parent={parent}"
     
     match normalized with
     | "neg" | "never_a_1" => 
@@ -190,43 +192,60 @@ partial def processEP (parent : Var) (ep : EP) (seenHandles : List Var)
 
     | p =>
       if lastTwoChars p == "_q" then
+        dbg_trace s!"PROCESS_EP: Starting quantifier {p}"
         match getOrderedQuantArgs ep.rargs with
         | none => (none, stats)
         | some (arg0, rstr, body) =>
+          dbg_trace s!"PROCESS_EP: Quantifier {p} ARG0={arg0} RSTR={rstr} BODY={body}"
           let rstrPreds := hm.find? rstr |>.getD []
           let bodyPreds := hm.find? body |>.getD []
+          dbg_trace s!"PROCESS_EP: RSTR preds={rstrPreds.map (·.predicate)} BODY preds={bodyPreds.map (·.predicate)}"
           
           match processPredicates ep.label rstrPreds newSeen hm stats ev scopedVars true,
                 processPredicates ep.label bodyPreds newSeen hm stats ev scopedVars true with
           | (some rstrFormula, stats1), (some bodyFormula, stats2) =>
+            dbg_trace s!"PROCESS_EP: Got formulas RSTR={rstrFormula} BODY={bodyFormula}"
             let rstrEvents := rstrPreds.foldl (fun acc p => 
               acc ++ (p.rargs.filter (fun arg => 
                 (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2))) [] |>.eraseDups
             let bodyEvents := bodyPreds.foldl (fun acc p => 
               acc ++ (p.rargs.filter (fun arg => 
                 (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2))) [] |>.eraseDups
+            
+            dbg_trace s!"PROCESS_EP: Events RSTR={rstrEvents} BODY={bodyEvents}"
 
             let guardedRstr := Formula.scope rstrEvents (some "rstr_guard") rstrFormula
             let guardedBody := Formula.scope bodyEvents (some "body_guard") bodyFormula
             
             -- Special case for no_q
             if p == "no_q" || p == "_no_q" then
-              (some (Formula.scope [arg0] (some "no_q") (Formula.conj [guardedRstr, guardedBody])), stats2)
+              dbg_trace s!"PROCESS_EP: Building no_q formula"
+              let formula := Formula.scope [arg0] (some "no_q") (Formula.conj [guardedRstr, guardedBody])
+              dbg_trace s!"PROCESS_EP: Final no_q formula: {formula}"
+              (some formula, stats2)
             else
-              (some (Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])), stats2)
+              dbg_trace s!"PROCESS_EP: Building regular quantifier formula"
+              let formula := Formula.scope [arg0] (some p) (Formula.conj [guardedRstr, guardedBody])
+              dbg_trace s!"PROCESS_EP: Final formula: {formula}"
+              (some formula, stats2)
           | _, _ => (none, stats)
       
       else 
         if inGuard then
           -- Already in a guard, just return the predicate
+          dbg_trace s!"PROCESS_EP: In guard, returning atom for {ep.predicate}"
           (some (Formula.atom ep), stats)
         else
           -- Not in a guard, ensure events are scoped
           let eventVars := ep.rargs.filter (fun arg => 
             (arg.2.sort == 'e' || arg.2.sort == 'i') && !(scopedVars.contains arg.2)) |>.map (·.2)
           match eventVars with
-          | [] => (some (Formula.atom ep), stats)
-          | evs => (some (Formula.scope evs none (Formula.atom ep)), stats)
+          | [] => 
+            dbg_trace s!"PROCESS_EP: No event vars for {ep.predicate}, returning atom"
+            (some (Formula.atom ep), stats)
+          | evs => 
+            dbg_trace s!"PROCESS_EP: Adding event scope for {ep.predicate} with events {evs}"
+            (some (Formula.scope evs none (Formula.atom ep)), stats)
 
 end
 
